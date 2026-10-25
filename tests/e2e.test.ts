@@ -85,7 +85,8 @@ beforeAll(async () => {
   context = await chromium.launchPersistentContext(join(tmp, "profile"), {
     channel: "chromium",
     headless: true,
-    args: [`--disable-extensions-except=${ext},${target}`, `--load-extension=${ext},${target}`],
+    // The warning text is asserted in English.
+    args: ["--lang=en-US", `--disable-extensions-except=${ext},${target}`, `--load-extension=${ext},${target}`],
   });
   watcher = await findWorker("extension-watch");
   targetSw = await findWorker("Target");

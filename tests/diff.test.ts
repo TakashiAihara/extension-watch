@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { diff, snapshot } from "../extension/diff.js";
+import { diff, snapshot, split } from "../extension/diff.js";
 
 const info = (over = {}) => ({
   id: "abc",
@@ -72,6 +72,11 @@ describe("diff", () => {
     expect(diff(off, snap([info()]))).toEqual([]);
   });
 
+  test("a record written before warnings existed still compares", () => {
+    const { warnings, ...old } = snap([info()]).abc;
+    expect(messages({ abc: old }, snap([info()], { abc: ["W"] }))).toEqual(["Sample (abc)\nwarnings added: W"]);
+  });
+
   test("uninstall only drops the record", () => {
     expect(diff(snap([info()]), {})).toEqual([]);
   });
@@ -86,5 +91,19 @@ describe("diff", () => {
     expect(Object.keys(snapshot([info({ id: "self" }), info({ id: "t", type: "theme" }), info()], "self"))).toEqual([
       "abc",
     ]);
+  });
+});
+
+describe("split", () => {
+  test("short text is one part", () => {
+    expect(split("abc", 10)).toEqual(["abc"]);
+  });
+
+  test("parts stay within the byte limit without breaking characters", () => {
+    const text = "aあ".repeat(5);
+    const parts = split(text, 5);
+    expect(parts.join("")).toBe(text);
+    expect(parts).toEqual(["aあa", "あa", "あa", "あa", "あ"]);
+    for (const p of parts) expect(new TextEncoder().encode(p).length).toBeLessThanOrEqual(5);
   });
 });
