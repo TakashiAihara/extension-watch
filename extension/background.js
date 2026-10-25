@@ -35,17 +35,21 @@ async function check() {
 }
 
 async function run() {
-  const infos = await chrome.management.getAll();
-  const warnings = {};
-  // Throws for an extension uninstalled since getAll; the next check drops it.
-  for (const e of infos) warnings[e.id] = await chrome.management.getPermissionWarningsById(e.id).catch(() => []);
-  const next = snapshot(infos, chrome.runtime.id, warnings);
-  const lang = chrome.i18n.getUILanguage();
   const { extensions: prev, ntfyUrl, warningsLang } = await chrome.storage.local.get([
     "extensions",
     "ntfyUrl",
     "warningsLang",
   ]);
+  const infos = await chrome.management.getAll();
+  const warnings = {};
+  // Throws for an extension uninstalled since getAll; keep the old warnings so no change is reported.
+  for (const e of infos) {
+    warnings[e.id] = await chrome.management
+      .getPermissionWarningsById(e.id)
+      .catch(() => prev?.[e.id]?.warnings ?? []);
+  }
+  const next = snapshot(infos, chrome.runtime.id, warnings);
+  const lang = chrome.i18n.getUILanguage();
 
   // First run: take a baseline instead of reporting every existing extension as new.
   if (!prev) return chrome.storage.local.set({ extensions: next, warningsLang: lang });
@@ -53,7 +57,6 @@ async function run() {
   // Warnings are localized; after a UI language change they would all read as added and removed.
   if (warningsLang !== lang) {
     for (const id of Object.keys(prev)) if (next[id]) prev[id] = { ...prev[id], warnings: next[id].warnings };
-    await chrome.storage.local.set({ warningsLang: lang });
   }
 
   // One message per extension, so one failing send does not hold back the others. A failed
@@ -69,7 +72,8 @@ async function run() {
       else delete saved[id];
     }
   }
-  await chrome.storage.local.set({ extensions: saved });
+  // Saved together, so a worker stopped in between cannot replay the language change.
+  await chrome.storage.local.set({ extensions: saved, warningsLang: lang });
   if (error) throw error;
 }
 

@@ -19,7 +19,7 @@ export function snapshot(infos, selfId, warnings = {}) {
   return out;
 }
 
-// `?? []`: records written before a list existed.
+// The default: records written before a list existed.
 const minus = (a, b = []) => a.filter((x) => !b.includes(x));
 const LISTS = [
   ["permissions", "permissions"],
