@@ -1,7 +1,10 @@
 <!doctype html>
 <meta charset="utf-8" />
 <title>extension-watch</title>
-<label>ntfy topic URL <input id="url" type="url" size="60" placeholder="https://ntfy.example.com/topic" /></label>
+<label>
+  ntfy topic URL
+  <input id="url" type="url" size="60" pattern="https?://.+" placeholder="https://ntfy.example.com/topic" />
+</label>
 <button id="save">Save</button>
 <p id="status"></p>
 <p>Last error: <span id="error"></span></p>

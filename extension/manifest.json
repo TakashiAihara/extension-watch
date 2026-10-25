@@ -3,7 +3,8 @@
   "name": "extension-watch",
   "version": "0.1.0",
   "description": "Notify ntfy when installed extensions are added, updated, change permissions, or get disabled.",
-  "permissions": ["management", "storage"],
+  "permissions": ["management", "storage", "alarms"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "action": { "default_title": "extension-watch" }
