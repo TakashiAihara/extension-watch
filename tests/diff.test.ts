@@ -12,6 +12,7 @@ const rec = (over: Partial<Record> = {}): Record => ({
   contentScriptSites: [],
   location: 1,
   disableReasons: [],
+  blocklist: [],
   ...over,
 });
 const snap = (...rs: Record[]) => Object.fromEntries(rs.map((r) => [`${r.profile}/${r.id}`, r]));
@@ -44,24 +45,42 @@ describe("diff", () => {
 
   test("new extension lists what it can reach", () => {
     expect(messages({}, snap(rec({ hosts: ["https://a/*"], contentScriptSites: ["<all_urls>"] })))).toEqual([
-      "Sample (abc) [Default]\ninstalled 1.0 (location 1)\npermissions: storage\nhosts: https://a/*\ncontent script sites: <all_urls>",
+      "Sample (abc) [Default]\ninstalled 1.0 (internal)\npermissions: storage\nhosts: https://a/*\ncontent script sites: <all_urls>",
     ]);
   });
 
   test("new extension installed already disabled", () => {
     expect(messages({}, snap(rec({ permissions: [], disableReasons: [1] })))).toEqual([
-      "Sample (abc) [Default]\ninstalled 1.0 (location 1)\ndisabled (reasons 1)",
+      "Sample (abc) [Default]\ninstalled 1.0 (internal)\ndisabled (user_action)",
     ]);
   });
 
   test("update that Chrome disabled", () => {
-    expect(messages(snap(rec()), snap(rec({ version: "1.1", disableReasons: [4] })))).toEqual([
-      "Sample (abc) [Default]\nversion 1.0 -> 1.1\ndisabled (reasons 4)",
+    expect(messages(snap(rec()), snap(rec({ version: "1.1", disableReasons: [2] })))).toEqual([
+      "Sample (abc) [Default]\nversion 1.0 -> 1.1\ndisabled (permissions_increase)",
+    ]);
+  });
+
+  test("a reason added to an already disabled extension is reported", () => {
+    expect(messages(snap(rec({ disableReasons: [1] })), snap(rec({ disableReasons: [1, 2] })))).toEqual([
+      "Sample (abc) [Default]\ndisabled (permissions_increase)",
+    ]);
+  });
+
+  test("an unknown reason and location are shown as numbers", () => {
+    expect(messages(snap(rec()), snap(rec({ location: 42, disableReasons: [1 << 30] })))).toEqual([
+      `Sample (abc) [Default]\nlocation internal -> location 42\ndisabled (${1 << 30})`,
+    ]);
+  });
+
+  test("blocklisting is reported", () => {
+    expect(messages(snap(rec()), snap(rec({ blocklist: ["blacklist_state=1"] })))).toEqual([
+      "Sample (abc) [Default]\nblocklisted (blacklist_state=1)",
     ]);
   });
 
   test("location change", () => {
-    expect(messages(snap(rec()), snap(rec({ location: 8 })))).toEqual(["Sample (abc) [Default]\nlocation 1 -> 8"]);
+    expect(messages(snap(rec()), snap(rec({ location: 8 })))).toEqual(["Sample (abc) [Default]\nlocation internal -> command_line"]);
   });
 
   test("staying disabled and re-enabling send nothing", () => {

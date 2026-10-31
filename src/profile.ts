@@ -11,12 +11,15 @@ export type Record = {
   contentScriptSites: string[];
   location: number;
   disableReasons: number[];
+  blocklist: string[];
 };
 
 export type Snapshot = { [key: string]: Record };
 
 // Chrome's built-in extensions (COMPONENT / EXTERNAL_COMPONENT) change only with Chrome itself.
 const SKIP_LOCATIONS = new Set([5, 10]);
+// Safe Browsing / Omaha blocklisting is kept here, not in disable_reasons (blocklist_extension_prefs.cc).
+const BLOCKLIST_KEYS = ["blacklist_state", "omaha_blocklist_state", "extension_telemetry_service_blocklist_state"];
 
 const sorted = (xs: unknown[] = []) => xs.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).sort();
 
@@ -31,6 +34,14 @@ function settings(profileDir: string): { [id: string]: any } {
   return out;
 }
 
+function readManifest(extDir: string): any {
+  try {
+    return JSON.parse(readFileSync(join(extDir, "manifest.json"), "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
 function resolveName(name: string, manifest: any, extDir: string): string {
   const m = /^__MSG_(.+)__$/.exec(name);
   if (!m || !manifest.default_locale) return name;
@@ -40,14 +51,6 @@ function resolveName(name: string, manifest: any, extDir: string): string {
     return key ? messages[key].message : name;
   } catch {
     return name;
-  }
-}
-
-function readManifest(extDir: string): any {
-  try {
-    return JSON.parse(readFileSync(join(extDir, "manifest.json"), "utf8"));
-  } catch {
-    return undefined;
   }
 }
 
@@ -71,19 +74,29 @@ export function readProfile(userDataDir: string, profile: string): Snapshot {
       hosts: sorted(active.explicit_host),
       contentScriptSites: sorted(active.scriptable_host),
       location: s.location,
-      disableReasons: [...(s.disable_reasons ?? [])].sort(),
+      disableReasons: [...(s.disable_reasons ?? [])].sort((a, b) => a - b),
+      blocklist: BLOCKLIST_KEYS.filter((k) => s[k]).map((k) => `${k}=${s[k]}`),
     };
   }
   return out;
 }
 
-// Profiles are the directories that hold a Preferences file ("Default", "Profile 2", ...).
-export function readAll(userDataDir: string): Snapshot {
-  const out: Snapshot = {};
-  for (const entry of readdirSync(userDataDir, { withFileTypes: true })) {
-    if (entry.isDirectory() && existsSync(join(userDataDir, entry.name, "Preferences"))) {
-      Object.assign(out, readProfile(userDataDir, entry.name));
+// Profiles are the directories that hold a Preferences file ("Default", "Profile 2", ...). A profile
+// that cannot be read is returned in `failed` so the others are still compared.
+export function readAll(userDataDir: string): { snapshot: Snapshot; failed: { profile: string; message: string }[] } {
+  const profiles = readdirSync(userDataDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && existsSync(join(userDataDir, e.name, "Preferences")))
+    .map((e) => e.name);
+  if (!profiles.length) throw new Error(`no Chrome profiles in ${userDataDir}`);
+
+  const snapshot: Snapshot = {};
+  const failed = [];
+  for (const profile of profiles) {
+    try {
+      Object.assign(snapshot, readProfile(userDataDir, profile));
+    } catch (err) {
+      failed.push({ profile, message: (err as Error).message });
     }
   }
-  return out;
+  return { snapshot, failed };
 }

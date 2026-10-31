@@ -85,7 +85,7 @@ test("a new extension whose send fails is reported as new on the next run", asyn
   expect(await run(env, "linux")).toBe(1);
   status = 200;
   expect(await run(env, "linux")).toBe(0);
-  expect(received).toEqual(["New (def) [Default]\ninstalled 3 (location 1)\npermissions: storage"]);
+  expect(received).toEqual(["New (def) [Default]\ninstalled 3 (internal)\npermissions: storage"]);
 });
 
 test("a long message is split into parts within ntfy's limit", async () => {
@@ -96,6 +96,8 @@ test("a long message is split into parts within ntfy's limit", async () => {
   expect(received.length).toBeGreaterThan(1);
   expect(received[0]).toStartWith(`(1/${received.length}) Sample (abc) [Default]`);
   for (const r of received) expect(new TextEncoder().encode(r).length).toBeLessThanOrEqual(4096);
+  const joined = received.map((r, i) => r.slice(`(${i + 1}/${received.length}) `.length)).join("");
+  expect(joined).toBe(`Sample (abc) [Default]\nhosts added: ${[...hosts].sort().join(", ")}`);
 });
 
 test("the token is sent as a bearer header, and no header without one", async () => {
@@ -127,10 +129,53 @@ test("unreadable Chrome data is sent as an error", async () => {
   expect(received[0]).toStartWith("cannot read Chrome extensions: ENOENT");
 });
 
-test("a profile with no extension records is sent as an error", async () => {
+test("a profile with no extensions is a valid baseline", async () => {
   writeProfile(chrome(), "Default", {});
+  expect(await run(env, "linux")).toBe(0);
+  writeProfile(chrome(), "Default", { abc: ext() });
+  expect(await run(env, "linux")).toBe(0);
+  expect(received).toEqual(["Sample (abc) [Default]\ninstalled 1.0 (internal)\npermissions: storage"]);
+});
+
+test("a lasting error is sent once, and again after a clean run", async () => {
+  writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: join(dir, "nowhere") });
   expect(await run(env, "linux")).toBe(1);
-  expect(received).toEqual(["cannot read Chrome extensions: no extension records found"]);
+  expect(await run(env, "linux")).toBe(1);
+  expect(received.length).toBe(1);
+  writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: chrome() });
+  expect(await run(env, "linux")).toBe(0);
+  writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: join(dir, "nowhere") });
+  expect(await run(env, "linux")).toBe(1);
+  expect(received.length).toBe(2);
+});
+
+test("an error that could not be sent is sent on the next run", async () => {
+  writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: join(dir, "nowhere") });
+  status = 500;
+  expect(await run(env, "linux")).toBe(1);
+  status = 200;
+  expect(await run(env, "linux")).toBe(1);
+  expect(received.length).toBe(1);
+});
+
+test("a profile that cannot be read keeps its records and the others are compared", async () => {
+  writeProfile(chrome(), "Profile 2", { def: ext({ manifest: { name: "Other", version: "1" } }) });
+  await run(env, "linux");
+  writeProfile(chrome(), "Default", { abc: ext({ manifest: { name: "Sample", version: "1.1" } }) });
+  writeFileSync(join(chrome(), "Profile 2", "Secure Preferences"), "{broken");
+  expect(await run(env, "linux")).toBe(1);
+  expect(received[0]).toBe("Sample (abc) [Default]\nversion 1.0 -> 1.1");
+  expect(received[1]).toStartWith("cannot read Chrome profile Profile 2: ");
+  writeProfile(chrome(), "Profile 2", { def: ext({ manifest: { name: "Other", version: "1" } }) });
+  expect(await run(env, "linux")).toBe(0);
+  expect(received.length).toBe(2);
+});
+
+test("a state file of the wrong shape is sent as an error", async () => {
+  await run(env, "linux");
+  writeFileSync(join(dir, "state", "extension-watch", "state.json"), JSON.stringify({ x: { permissions: [] } }));
+  expect(await run(env, "linux")).toBe(1);
+  expect(received[0]).toEndWith("state.json: unexpected shape");
 });
 
 test("a corrupt state file is sent as an error", async () => {

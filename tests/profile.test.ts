@@ -16,11 +16,11 @@ test("reads extensions from every profile and skips built-in and empty records",
     external_builtin: ext({ location: 10 }),
     leftover: { disable_reasons: [1] },
   });
-  writeProfile(dir, "Profile 2", { def: ext({ path: "/abs/def", disable_reasons: [4, 1] }) });
+  writeProfile(dir, "Profile 2", { def: ext({ path: "/abs/def", disable_reasons: [4, 1, 16], blacklist_state: 1, omaha_blocklist_state: 0 }) });
   mkdirSync(join(dir, "System Profile"));
   writeFileSync(join(dir, "Local State"), "{}");
 
-  expect(readAll(dir)).toEqual({
+  expect(readAll(dir).snapshot).toEqual({
     "Default/abc": {
       profile: "Default",
       id: "abc",
@@ -31,6 +31,7 @@ test("reads extensions from every profile and skips built-in and empty records",
       contentScriptSites: ["<all_urls>"],
       location: 1,
       disableReasons: [],
+      blocklist: [],
     },
     "Profile 2/def": {
       profile: "Profile 2",
@@ -41,7 +42,8 @@ test("reads extensions from every profile and skips built-in and empty records",
       hosts: [],
       contentScriptSites: [],
       location: 1,
-      disableReasons: [1, 4],
+      disableReasons: [1, 4, 16],
+      blocklist: ["blacklist_state=1"],
     },
   });
 });
@@ -52,13 +54,13 @@ test("resolves a localized name from the extension's default locale", () => {
   const locale = join(dir, "Default", "Extensions", "abc", "1.0_0", "_locales", "en");
   mkdirSync(locale, { recursive: true });
   writeFileSync(join(locale, "messages.json"), JSON.stringify({ AppName: { message: "Real Name" } }));
-  expect(readAll(dir)["Default/abc"].name).toBe("Real Name");
+  expect(readAll(dir).snapshot["Default/abc"].name).toBe("Real Name");
 });
 
 test("keeps the raw name when the locale file is missing", () => {
   dir = mkdtempSync(join(tmpdir(), "ew-profile-"));
   writeProfile(dir, "Default", { abc: ext({ manifest: { name: "__MSG_x__", version: "2", default_locale: "en" } }) });
-  expect(readAll(dir)["Default/abc"].name).toBe("__MSG_x__");
+  expect(readAll(dir).snapshot["Default/abc"].name).toBe("__MSG_x__");
 });
 
 test("reads the manifest from the folder when the record has none (unpacked)", () => {
@@ -67,7 +69,23 @@ test("reads the manifest from the folder when the record has none (unpacked)", (
   mkdirSync(folder);
   writeFileSync(join(folder, "manifest.json"), JSON.stringify({ name: "Unpacked", version: "0.3" }));
   writeProfile(dir, "Default", { abc: ext({ path: folder, location: 8, manifest: undefined }), gone: ext({ path: join(dir, "missing"), manifest: undefined }) });
-  const snap = readAll(dir);
+  const snap = readAll(dir).snapshot;
   expect(Object.keys(snap)).toEqual(["Default/abc"]);
   expect(snap["Default/abc"]).toMatchObject({ name: "Unpacked", version: "0.3", location: 8 });
+});
+
+test("a profile that cannot be parsed is reported and the others are still read", () => {
+  dir = mkdtempSync(join(tmpdir(), "ew-profile-"));
+  writeProfile(dir, "Default", { abc: ext() });
+  writeProfile(dir, "Profile 2", {});
+  writeFileSync(join(dir, "Profile 2", "Secure Preferences"), "{broken");
+  const { snapshot, failed } = readAll(dir);
+  expect(Object.keys(snapshot)).toEqual(["Default/abc"]);
+  expect(failed.map((f) => f.profile)).toEqual(["Profile 2"]);
+});
+
+test("a directory with no profiles is an error", () => {
+  dir = mkdtempSync(join(tmpdir(), "ew-profile-"));
+  mkdirSync(join(dir, "System Profile"));
+  expect(() => readAll(dir)).toThrow("no Chrome profiles in");
 });

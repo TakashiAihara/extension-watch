@@ -11,10 +11,11 @@ For every extension in every profile (Chrome's built-in extensions are skipped):
 - installed (with its permissions, hosts, and content script sites)
 - version changed
 - permissions, hosts, or content script sites added or removed
-- install location changed
-- disabled, with Chrome's numeric disable reasons
+- install location changed (`internal`, `command_line`, ...)
+- disabled, or a disable reason added (`user_action`, `permissions_increase`, ...)
+- blocklisted by Safe Browsing or the update server (`blacklist_state` / `omaha_blocklist_state` / `extension_telemetry_service_blocklist_state`, shown with Chrome's raw value)
 
-Removed extensions are dropped from the record without a message. The first run only records a baseline.
+Removed extensions are dropped from the record without a message. The first run only records a baseline. A profile with no extensions is a valid baseline.
 
 ## Where it reads
 
@@ -49,7 +50,7 @@ Content script sites come from `active_permissions.scriptable_host`, which the `
 ## Failures
 
 - A message that cannot be sent (network error, timeout after 10 s, non-2xx) keeps that extension's old record, so the same change is sent on the next run. Exit code 1
-- Chrome data or the state file that cannot be read is sent to ntfy as an error. Exit code 1
+- Chrome data, a profile, or the state file that cannot be read is sent to ntfy as an error. Exit code 1. The same error is sent once, and again only when its text changes or after a clean run (`last-error.txt` next to the state file). A profile that cannot be read keeps its old records; the other profiles are still compared
 - A missing or invalid `config.json` cannot be sent anywhere. It is printed to stderr and the run exits with 1, which Task Scheduler shows as the last run result
 - Messages over 4080 bytes are sent in parts prefixed `(1/2) `
 
@@ -60,15 +61,17 @@ bun install
 bun run build:windows
 ```
 
-Copy `dist/extension-watch.exe` to `%LOCALAPPDATA%\Programs\extension-watch\`, write `config.json`, then register it in PowerShell:
+Copy `dist/extension-watch.exe` to `%LOCALAPPDATA%\Programs\extension-watch\`, write `config.json`, then register it in PowerShell. It runs every 5 minutes, also on battery:
 
 ```powershell
 $exe = "$env:LOCALAPPDATA\Programs\extension-watch\extension-watch.exe"
-schtasks /Create /TN extension-watch /SC MINUTE /MO 5 /TR "`"$exe`"" /F
-schtasks /Run /TN extension-watch
+$action = New-ScheduledTaskAction -Execute $exe
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+Register-ScheduledTask -TaskName extension-watch -Action $action -Trigger $trigger -Settings $settings -Force
 ```
 
-Stop it with `schtasks /Delete /TN extension-watch /F`.
+Stop it with `Unregister-ScheduledTask -TaskName extension-watch -Confirm:$false`.
 
 ## Test
 
@@ -82,6 +85,7 @@ bun test
 
 ## Not verified
 
-- Whether an update that Chrome disables for a permission increase still lists the old permissions in `active_permissions`
+- Whether an update that Chrome disables for a permission increase already lists the new permissions in `active_permissions`
+- The blocklist keys: none of them were present on the profiles measured, so their values have not been seen
 - Reading `Secure Preferences` while Chrome is writing it
 - macOS
