@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "build:windows": "bun build --compile --target=bun-windows-x64 --windows-hide-console src/cli.ts --outfile dist/extension-watch.exe"
   },
   "devDependencies": {
     "playwright": "1.64.1"
