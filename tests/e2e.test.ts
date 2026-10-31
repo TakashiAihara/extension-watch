@@ -6,20 +6,21 @@ import { chromium, type BrowserContext, type Worker } from "playwright";
 
 // Fake ntfy: records accepted POST bodies. It sends the CORS header the real server sends by default,
 // because the test cannot grant the optional host permission (that needs a user gesture).
-const received: { url: string; body: string }[] = [];
+const received: { url: string; body: string; auth: string | null }[] = [];
 let rejected = 0;
 let failing = false;
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   async fetch(req) {
-    const headers = { "Access-Control-Allow-Origin": "*" };
+    // ntfy answers the preflight a token header triggers; the real run skips it with the host permission.
+    const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization" };
     if (req.method !== "POST") return new Response("{}", { headers });
     if (failing) {
       rejected++;
       return new Response("{}", { status: 500, headers });
     }
-    received.push({ url: req.url, body: await req.text() });
+    received.push({ url: req.url, body: await req.text(), auth: req.headers.get("authorization") });
     return new Response("{}", { headers });
   },
 });
@@ -111,6 +112,7 @@ test("a version bump with a new permission and content scripts is sent once to n
   await Bun.sleep(3000);
   expect(received.length).toBe(1);
   expect(new URL(received[0].url).searchParams.get("title")).toBe("extension-watch");
+  expect(received[0].auth).toBeNull();
   // The content-script matches show up only as a warning, not in hostPermissions.
   expect(received[0].body).toMatch(
     /^Target \([a-p]{32}\)\nversion 1\.0 -> 1\.1\npermissions added: tabs\nwarnings added: .*all your data on all websites.*$/,
@@ -131,6 +133,32 @@ test("a rejected send is retried with the same change", async () => {
   expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.1 -> 1\.2$/);
   await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError)) === null);
 }, 30000);
+
+test("a saved token is sent as a bearer header", async () => {
+  received.length = 0;
+  await watcher.evaluate(() => chrome.storage.local.set({ ntfyToken: "test-token-123" }));
+  writeTarget("1.3", ["storage", "tabs"], [{ matches: ["<all_urls>"], js: ["cs.js"] }]);
+  await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
+  await waitFor(() => received.length > 0);
+  expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.2 -> 1\.3$/);
+  expect(received[0].auth).toBe("Bearer test-token-123");
+}, 30000);
+
+test("the options page rejects credentials in the URL and a token a header cannot hold", async () => {
+  const id = new URL(watcher.url()).host;
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${id}/options.html`);
+  const status = async (url: string, token: string) => {
+    await page.fill("#url", url);
+    await page.fill("#token", token);
+    await page.click("#save");
+    return page.textContent("#status");
+  };
+  expect(await status("https://u:p@ntfy.example.com/t", "")).toBe("Put credentials in the token field, not in user:pass@");
+  expect(await status("ftp://ntfy.example.com/t", "")).toBe("Enter an http(s) URL");
+  expect(await status("https://ntfy.example.com/t", "bad token")).toBe("The token has characters a header cannot hold");
+  await page.close();
+});
 
 test("disabling an extension is sent", async () => {
   received.length = 0;

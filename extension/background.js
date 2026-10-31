@@ -35,9 +35,10 @@ async function check() {
 }
 
 async function run() {
-  const { extensions: prev, ntfyUrl, warningsLang } = await chrome.storage.local.get([
+  const { extensions: prev, ntfyUrl, ntfyToken, warningsLang } = await chrome.storage.local.get([
     "extensions",
     "ntfyUrl",
+    "ntfyToken",
     "warningsLang",
   ]);
   const infos = await chrome.management.getAll();
@@ -65,7 +66,7 @@ async function run() {
   let error;
   for (const { id, message } of diff(prev, next)) {
     try {
-      await send(ntfyUrl, message);
+      await send(ntfyUrl, ntfyToken, message);
     } catch (err) {
       error ??= err;
       if (prev[id]) saved[id] = prev[id];
@@ -77,15 +78,18 @@ async function run() {
   if (error) throw error;
 }
 
-async function send(ntfyUrl, message) {
+async function send(ntfyUrl, ntfyToken, message) {
   if (!ntfyUrl) throw new Error("ntfy URL is not set");
+  // A token a header cannot hold would be quoted in fetch's error message, which lands in lastError.
+  if (ntfyToken && !/^[\x21-\x7e]+$/.test(ntfyToken)) throw new Error("ntfy token has characters a header cannot hold");
+  const headers = ntfyToken ? { Authorization: `Bearer ${ntfyToken}` } : {};
   const url = new URL(ntfyUrl);
   url.searchParams.set("title", "extension-watch");
   const parts = split(message, MAX_BYTES);
   // A failed part fails the whole extension, so parts sent before it are sent again on the retry.
   for (const [i, part] of parts.entries()) {
     const body = parts.length > 1 ? `(${i + 1}/${parts.length}) ${part}` : part;
-    const res = await fetch(url, { method: "POST", body, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
+    const res = await fetch(url, { method: "POST", body, headers, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`ntfy ${res.status}`);
   }
 }
@@ -103,5 +107,5 @@ chrome.alarms.onAlarm.addListener(schedule);
 chrome.runtime.onStartup.addListener(schedule);
 chrome.runtime.onInstalled.addListener(schedule);
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.ntfyUrl) schedule();
+  if (changes.ntfyUrl || changes.ntfyToken) schedule();
 });

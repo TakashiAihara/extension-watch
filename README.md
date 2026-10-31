@@ -23,7 +23,7 @@ Permissions: `management`, `storage`, `alarms`, and an optional host permission 
 ## Install
 
 1. Open `chrome://extensions`, turn on Developer mode, and click "Load unpacked". Select the `extension/` directory.
-2. Open the extension's options, enter the ntfy topic URL (for example `https://ntfy.example.com/extension-watch`), save, and allow access to that origin.
+2. Open the extension's options, enter the ntfy topic URL (for example `https://ntfy.example.com/extension-watch`) and, if the server requires authentication, an access token (sent as `Authorization: Bearer`). Save and allow access to that origin.
 
 ## Test
 
