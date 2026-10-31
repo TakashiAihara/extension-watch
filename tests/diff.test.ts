@@ -1,96 +1,83 @@
 import { describe, expect, test } from "bun:test";
-import { diff, snapshot, split } from "../extension/diff.js";
+import { diff, split } from "../src/diff";
+import type { Record } from "../src/profile";
 
-const info = (over = {}) => ({
+const rec = (over: Partial<Record> = {}): Record => ({
+  profile: "Default",
   id: "abc",
   name: "Sample",
-  type: "extension",
   version: "1.0",
   permissions: ["storage"],
-  hostPermissions: [],
-  installType: "normal",
-  enabled: true,
+  hosts: [],
+  contentScriptSites: [],
+  location: 1,
+  disableReasons: [],
   ...over,
 });
-
-const snap = (infos: object[], warnings = {}) => snapshot(infos, "self", warnings);
-const messages = (prev: object, next: object) => diff(prev, next).map((c) => c.message);
+const snap = (...rs: Record[]) => Object.fromEntries(rs.map((r) => [`${r.profile}/${r.id}`, r]));
+const messages = (prev: object, next: object) => diff(prev as any, next as any).map((c) => c.message);
 
 describe("diff", () => {
   test("no change sends nothing", () => {
-    expect(diff(snap([info()]), snap([info()]))).toEqual([]);
+    expect(diff(snap(rec()), snap(rec()))).toEqual([]);
   });
 
-  test("version bump with added and removed permissions, hosts and warnings", () => {
-    const prev = snap([info({ hostPermissions: ["https://a.example/*"] })], { abc: ["Old warning"] });
-    const next = snap([info({ version: "1.1", permissions: ["tabs"], hostPermissions: ["https://b.example/*"] })], {
-      abc: ["Read and change all your data on all websites"],
-    });
+  test("version bump with added and removed permissions, hosts and content script sites", () => {
+    const prev = snap(rec({ hosts: ["https://a.example/*"], contentScriptSites: ["https://old.example/*"] }));
+    const next = snap(rec({ version: "1.1", permissions: ["tabs"], hosts: ["https://b.example/*"], contentScriptSites: ["<all_urls>"] }));
     expect(diff(prev, next)).toEqual([
       {
-        id: "abc",
+        key: "Default/abc",
         message: [
-          "Sample (abc)",
+          "Sample (abc) [Default]",
           "version 1.0 -> 1.1",
           "permissions added: tabs",
           "permissions removed: storage",
           "hosts added: https://b.example/*",
           "hosts removed: https://a.example/*",
-          "warnings added: Read and change all your data on all websites",
-          "warnings removed: Old warning",
+          "content script sites added: <all_urls>",
+          "content script sites removed: https://old.example/*",
         ].join("\n"),
       },
     ]);
   });
 
-  test("new extension lists its permissions, hosts and warnings", () => {
-    expect(messages({}, snap([info({ hostPermissions: ["<all_urls>"] })], { abc: ["W"] }))).toEqual([
-      "Sample (abc)\ninstalled 1.0 (normal)\npermissions: storage\nhosts: <all_urls>\nwarnings: W",
+  test("new extension lists what it can reach", () => {
+    expect(messages({}, snap(rec({ hosts: ["https://a/*"], contentScriptSites: ["<all_urls>"] })))).toEqual([
+      "Sample (abc) [Default]\ninstalled 1.0 (location 1)\npermissions: storage\nhosts: https://a/*\ncontent script sites: <all_urls>",
     ]);
   });
 
   test("new extension installed already disabled", () => {
-    expect(messages({}, snap([info({ permissions: [], enabled: false })]))).toEqual([
-      "Sample (abc)\ninstalled 1.0 (normal)\ndisabled (unknown)",
+    expect(messages({}, snap(rec({ permissions: [], disableReasons: [1] })))).toEqual([
+      "Sample (abc) [Default]\ninstalled 1.0 (location 1)\ndisabled (reasons 1)",
     ]);
   });
 
-  test("update disabled by Chrome for a permission increase", () => {
-    const next = snap([info({ version: "1.1", enabled: false, disabledReason: "permissions_increase" })]);
-    expect(messages(snap([info()]), next)).toEqual(["Sample (abc)\nversion 1.0 -> 1.1\ndisabled (permissions_increase)"]);
+  test("update that Chrome disabled", () => {
+    expect(messages(snap(rec()), snap(rec({ version: "1.1", disableReasons: [4] })))).toEqual([
+      "Sample (abc) [Default]\nversion 1.0 -> 1.1\ndisabled (reasons 4)",
+    ]);
   });
 
-  test("installType change", () => {
-    expect(messages(snap([info()]), snap([info({ installType: "admin" })]))).toEqual([
-      "Sample (abc)\ninstallType normal -> admin",
-    ]);
+  test("location change", () => {
+    expect(messages(snap(rec()), snap(rec({ location: 8 })))).toEqual(["Sample (abc) [Default]\nlocation 1 -> 8"]);
   });
 
   test("staying disabled and re-enabling send nothing", () => {
-    const off = snap([info({ enabled: false })]);
+    const off = snap(rec({ disableReasons: [1] }));
     expect(diff(off, off)).toEqual([]);
-    expect(diff(off, snap([info()]))).toEqual([]);
+    expect(diff(off, snap(rec()))).toEqual([]);
   });
 
-  test("a record written before warnings existed still compares", () => {
-    const { warnings, ...old } = snap([info()]).abc;
-    expect(messages({ abc: old }, snap([info()], { abc: ["W"] }))).toEqual(["Sample (abc)\nwarnings added: W"]);
+  test("the same extension in two profiles is reported per profile", () => {
+    const prev = snap(rec(), rec({ profile: "Profile 2" }));
+    const next = snap(rec({ version: "2" }), rec({ profile: "Profile 2", version: "2" }));
+    expect(diff(prev, next).map((c) => c.key)).toEqual(["Default/abc", "Profile 2/abc"]);
   });
 
-  test("uninstall only drops the record", () => {
-    expect(diff(snap([info()]), {})).toEqual([]);
-  });
-
-  test("one entry per changed extension", () => {
-    const prev = snap([info(), info({ id: "def", name: "Other" })]);
-    const next = snap([info({ version: "2" }), info({ id: "def", name: "Other", version: "3" })]);
-    expect(diff(prev, next).map((c) => c.id)).toEqual(["abc", "def"]);
-  });
-
-  test("snapshot skips itself and non-extensions", () => {
-    expect(Object.keys(snapshot([info({ id: "self" }), info({ id: "t", type: "theme" }), info()], "self"))).toEqual([
-      "abc",
-    ]);
+  test("removal only drops the record", () => {
+    expect(diff(snap(rec()), {})).toEqual([]);
   });
 });
 
@@ -104,6 +91,5 @@ describe("split", () => {
     const parts = split(text, 5);
     expect(parts.join("")).toBe(text);
     expect(parts).toEqual(["aあa", "あa", "あa", "あa", "あ"]);
-    for (const p of parts) expect(new TextEncoder().encode(p).length).toBeLessThanOrEqual(5);
   });
 });
