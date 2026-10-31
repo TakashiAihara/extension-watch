@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { paths, run } from "../src/watch";
@@ -149,6 +149,60 @@ test("a lasting error is sent once, and again after a clean run", async () => {
   expect(received.length).toBe(2);
 });
 
+test("a different error is sent even without a clean run in between", async () => {
+  writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: join(dir, "nowhere") });
+  expect(await run(env, "linux")).toBe(1);
+  writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: join(dir, "elsewhere") });
+  expect(await run(env, "linux")).toBe(1);
+  expect(received.length).toBe(2);
+  expect(received[1]).toContain("elsewhere");
+});
+
+test("the same error is sent again after a day", async () => {
+  writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: join(dir, "nowhere") });
+  expect(await run(env, "linux")).toBe(1);
+  const f = join(dir, "state", "extension-watch", "last-error.txt");
+  const old = (Date.now() - 25 * 60 * 60 * 1000) / 1000;
+  utimesSync(f, old, old);
+  expect(await run(env, "linux")).toBe(1);
+  expect(received.length).toBe(2);
+});
+
+test("no baseline is written while a profile cannot be read", async () => {
+  writeProfile(chrome(), "Profile 2", {});
+  writeFileSync(join(chrome(), "Profile 2", "Secure Preferences"), "{broken");
+  expect(await run(env, "linux")).toBe(1);
+  expect(existsSync(join(dir, "state", "extension-watch", "state.json"))).toBe(false);
+});
+
+test("a profile that loses all its extensions is reported once", async () => {
+  writeProfile(chrome(), "Profile 2", { def: ext(), ghi: ext() });
+  await run(env, "linux");
+  writeProfile(chrome(), "Profile 2", {});
+  expect(await run(env, "linux")).toBe(0);
+  expect(await run(env, "linux")).toBe(0);
+  expect(received).toEqual(["[Profile 2] no extensions found any more (was 2)"]);
+});
+
+test("the emptied-profile message is retried when its send fails", async () => {
+  writeProfile(chrome(), "Profile 2", { def: ext() });
+  await run(env, "linux");
+  writeProfile(chrome(), "Profile 2", {});
+  status = 500;
+  expect(await run(env, "linux")).toBe(1);
+  status = 200;
+  expect(await run(env, "linux")).toBe(0);
+  expect(received).toEqual(["[Profile 2] no extensions found any more (was 1)"]);
+});
+
+test("an ntfyUrl that is not http(s) fails without sending", async () => {
+  writeConfig({ ntfyUrl: "ntfy.example.com/topic", chromeUserDataDir: chrome() });
+  expect(await run(env, "linux")).toBe(1);
+  writeConfig({ ntfyUrl: "ftp://ntfy.example.com/topic", chromeUserDataDir: chrome() });
+  expect(await run(env, "linux")).toBe(1);
+  expect(received).toEqual([]);
+});
+
 test("an error that could not be sent is sent on the next run", async () => {
   writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: join(dir, "nowhere") });
   status = 500;
@@ -173,9 +227,15 @@ test("a profile that cannot be read keeps its records and the others are compare
 
 test("a state file of the wrong shape is sent as an error", async () => {
   await run(env, "linux");
-  writeFileSync(join(dir, "state", "extension-watch", "state.json"), JSON.stringify({ x: { permissions: [] } }));
-  expect(await run(env, "linux")).toBe(1);
-  expect(received[0]).toEndWith("state.json: unexpected shape");
+  const f = join(dir, "state", "extension-watch", "state.json");
+  const shapes = [{ x: { permissions: [] } }, null, [], { x: { permissions: [], disableReasons: [] } }];
+  for (const shape of shapes) {
+    rmSync(join(dir, "state", "extension-watch", "last-error.txt"), { force: true });
+    writeFileSync(f, JSON.stringify(shape));
+    expect(await run(env, "linux")).toBe(1);
+  }
+  expect(received.length).toBe(shapes.length);
+  for (const r of received) expect(r).toEndWith("state.json: unexpected shape");
 });
 
 test("a corrupt state file is sent as an error", async () => {

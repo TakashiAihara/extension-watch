@@ -37,13 +37,11 @@ function settings(profileDir: string): { [id: string]: any } {
   return out;
 }
 
-// Current Chrome stores a list of reason bits; older profiles store one integer bitmask.
+// Chrome reads disable_reasons only as a list of reason bits (extension_prefs.cc) and ignores a
+// leftover integer bitmask and non-integer entries, so they are ignored here too.
 function reasons(value: unknown): number[] {
-  if (Array.isArray(value)) return [...value].sort((a, b) => a - b);
-  if (typeof value !== "number") return [];
-  const out = [];
-  for (let bit = 1; bit <= value; bit *= 2) if (value & bit) out.push(bit);
-  return out;
+  if (!Array.isArray(value)) return [];
+  return value.filter((x) => Number.isInteger(x)).sort((a, b) => a - b);
 }
 
 function readManifest(extDir: string): any {
@@ -56,7 +54,8 @@ function readManifest(extDir: string): any {
 
 function resolveName(name: string, manifest: any, extDir: string): string {
   const m = /^__MSG_(.+)__$/.exec(name);
-  if (!m || !manifest.default_locale) return name;
+  // The locale names a folder under _locales; anything else must not reach the path.
+  if (!m || !/^[A-Za-z0-9_-]+$/.test(manifest.default_locale ?? "")) return name;
   try {
     const messages = JSON.parse(readFileSync(join(extDir, "_locales", manifest.default_locale, "messages.json"), "utf8"));
     const key = Object.keys(messages).find((k) => k.toLowerCase() === m[1].toLowerCase());
@@ -95,7 +94,11 @@ export function readProfile(userDataDir: string, profile: string): Snapshot {
 
 // Profiles are the directories that hold a Preferences file ("Default", "Profile 2", ...). A profile
 // that cannot be read is returned in `failed` so the others are still compared.
-export function readAll(userDataDir: string): { snapshot: Snapshot; failed: { profile: string; message: string }[] } {
+export function readAll(userDataDir: string): {
+  snapshot: Snapshot;
+  profiles: string[];
+  failed: { profile: string; message: string }[];
+} {
   const profiles = readdirSync(userDataDir, { withFileTypes: true })
     .filter((e) => e.isDirectory() && !NOT_PROFILES.has(e.name) && existsSync(join(userDataDir, e.name, "Preferences")))
     .map((e) => e.name);
@@ -110,5 +113,5 @@ export function readAll(userDataDir: string): { snapshot: Snapshot; failed: { pr
       failed.push({ profile, message: (err as Error).message });
     }
   }
-  return { snapshot, failed };
+  return { snapshot, profiles: profiles.filter((p) => !failed.some((f) => f.profile === p)), failed };
 }

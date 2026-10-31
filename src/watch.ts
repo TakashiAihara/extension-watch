@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { diff, split } from "./diff";
@@ -54,12 +54,15 @@ function writeAtomic(path: string, data: string) {
 
 const errorFile = (p: Paths) => join(dirname(p.state), "last-error.txt");
 
-// A lasting error (wrong path, corrupt state) would otherwise be sent every run; send it once
-// and again only when the text changes or after a clean run.
+// A lasting error (wrong path, corrupt state) would otherwise be sent every run. Send it again only
+// when the text changes, after a clean run, or once a day, so a missed push is not the only one.
+const RESEND_ERROR_MS = 24 * 60 * 60 * 1000;
+
 async function reportError(config: Config, p: Paths, message: string) {
   console.error(`extension-watch: ${message}`);
   try {
-    if (existsSync(errorFile(p)) && readFileSync(errorFile(p), "utf8") === message) return;
+    const f = errorFile(p);
+    if (existsSync(f) && readFileSync(f, "utf8") === message && Date.now() - statSync(f).mtimeMs < RESEND_ERROR_MS) return;
     await send(config, message);
     writeAtomic(errorFile(p), message);
   } catch (err) {
@@ -72,7 +75,9 @@ function readState(path: string): Snapshot {
     const state = JSON.parse(readFileSync(path, "utf8"));
     const ok =
       state && typeof state === "object" && !Array.isArray(state) &&
-      Object.values(state).every((r: any) => r && Array.isArray(r.permissions) && Array.isArray(r.disableReasons));
+      Object.values(state).every(
+        (r: any) => r && typeof r.profile === "string" && Array.isArray(r.permissions) && Array.isArray(r.disableReasons),
+      );
     if (!ok) throw new Error("unexpected shape");
     return state;
   } catch (err) {
@@ -91,9 +96,10 @@ async function check(config: Config, p: Paths): Promise<{ errors: string[]; send
   const next = read.snapshot;
   const errors = read.failed.map((f) => `cannot read Chrome profile ${f.profile}: ${f.message}`);
 
-  // First run: take a baseline instead of reporting every existing extension as new.
+  // First run: take a baseline instead of reporting every existing extension as new. Wait until
+  // every profile reads, or a profile that failed now would be reported as all new later.
   if (!existsSync(p.state)) {
-    writeAtomic(p.state, JSON.stringify(next));
+    if (!errors.length) writeAtomic(p.state, JSON.stringify(next));
     return { errors, sendFailed: false };
   }
   const prev = readState(p.state);
@@ -102,16 +108,27 @@ async function check(config: Config, p: Paths): Promise<{ errors: string[]; send
   const failedProfiles = new Set(read.failed.map((f) => f.profile));
   for (const [key, r] of Object.entries(prev)) if (failedProfiles.has(r.profile)) next[key] = r;
 
+  // Removals are silent per extension, but a profile that loses all of them at once (a reset or
+  // unreadable Secure Preferences) is worth one message.
+  const changes = diff(prev, next);
+  for (const profile of read.profiles) {
+    const before = Object.values(prev).filter((r) => r.profile === profile).length;
+    const after = Object.values(next).filter((r) => r.profile === profile).length;
+    if (before && !after) changes.push({ key: `${profile}/`, message: `[${profile}] no extensions found any more (was ${before})` });
+  }
+
   // A failed extension keeps its old record, so the same change is sent on the next run.
   const saved = { ...next };
   let sendFailed = false;
-  for (const { key, message } of diff(prev, next)) {
+  for (const { key, message } of changes) {
     try {
       await send(config, message);
     } catch (err) {
       console.error(`extension-watch: ${(err as Error).message}`);
       sendFailed = true;
-      if (prev[key]) saved[key] = prev[key];
+      if (key.endsWith("/")) {
+        for (const [k, r] of Object.entries(prev)) if (`${r.profile}/` === key) saved[k] = r;
+      } else if (prev[key]) saved[key] = prev[key];
       else delete saved[key];
     }
   }
@@ -126,6 +143,7 @@ export async function run(env: Env = process.env, platform = process.platform): 
   try {
     config = JSON.parse(readFileSync(p.config, "utf8"));
     if (!config.ntfyUrl) throw new Error("ntfyUrl is not set");
+    if (!/^https?:$/.test(new URL(config.ntfyUrl).protocol)) throw new Error("ntfyUrl must be http(s)");
     // A token with characters a header cannot hold would be quoted in fetch's error message.
     if (config.ntfyToken !== undefined && !/^[\x21-\x7e]+$/.test(config.ntfyToken.trim())) {
       throw new Error("ntfyToken has characters a header cannot hold");

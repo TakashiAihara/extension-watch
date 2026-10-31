@@ -90,12 +90,22 @@ test("a directory with no profiles is an error", () => {
   expect(() => readAll(dir)).toThrow("no Chrome profiles in");
 });
 
-test("a legacy integer bitmask of disable reasons is read as reason bits", () => {
+test("a leftover integer bitmask and non-integer reasons are ignored, as Chrome does", () => {
   dir = mkdtempSync(join(tmpdir(), "ew-profile-"));
-  writeProfile(dir, "Default", { abc: ext({ disable_reasons: 6 }), def: ext({ disable_reasons: 0 }) });
+  writeProfile(dir, "Default", { abc: ext({ disable_reasons: 6 }), def: ext({ disable_reasons: [2, "x", 1] }) });
   const { snapshot } = readAll(dir);
-  expect(snapshot["Default/abc"].disableReasons).toEqual([2, 4]);
-  expect(snapshot["Default/def"].disableReasons).toEqual([]);
+  expect(snapshot["Default/abc"].disableReasons).toEqual([]);
+  expect(snapshot["Default/def"].disableReasons).toEqual([1, 2]);
+});
+
+test("a default_locale that is not a folder name is not used as a path", () => {
+  dir = mkdtempSync(join(tmpdir(), "ew-profile-"));
+  writeProfile(dir, "Default", { abc: ext({ manifest: { name: "__MSG_n__", version: "1", default_locale: "../../x" } }) });
+  // _locales/../../x from Extensions/abc/1.0_0 lands in Extensions/abc/x.
+  const outside = join(dir, "Default", "Extensions", "abc", "x");
+  mkdirSync(outside, { recursive: true });
+  writeFileSync(join(outside, "messages.json"), JSON.stringify({ n: { message: "Leaked" } }));
+  expect(readAll(dir).snapshot["Default/abc"].name).toBe("__MSG_n__");
 });
 
 test("guest and system profiles are not read", () => {

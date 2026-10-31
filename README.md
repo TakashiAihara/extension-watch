@@ -52,7 +52,8 @@ Content script sites come from `active_permissions.scriptable_host`, which the `
 ## Failures
 
 - A message that cannot be sent (network error, timeout after 10 s, non-2xx) keeps that extension's old record, so the same change is sent on the next run. Exit code 1
-- Chrome data, a profile, or the state file that cannot be read is sent to ntfy as an error. Exit code 1. The same error is sent once, and again only when its text changes or after a clean run (`last-error.txt` next to the state file). A profile that cannot be read keeps its old records; the other profiles are still compared
+- Chrome data, a profile, or the state file that cannot be read is sent to ntfy as an error. Exit code 1. The same error is sent again only when its text changes, after a clean run, or after 24 hours (`last-error.txt` next to the state file). A profile that cannot be read keeps its old records; the other profiles are still compared. No baseline is written until every profile reads
+- A profile that loses all its extensions at once is reported once (`[Default] no extensions found any more (was 5)`)
 - A missing or invalid `config.json` cannot be sent anywhere. It is printed to stderr and the run exits with 1, which Task Scheduler shows as the last run result
 - Messages over 4080 bytes are sent in parts prefixed `(1/2) `
 
