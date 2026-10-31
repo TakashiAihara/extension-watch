@@ -25,6 +25,8 @@ Removed extensions are dropped from the record without a message. The first run 
 | macOS | `~/Library/Application Support/Google/Chrome` | `<profile>/Preferences` or `Secure Preferences` |
 | Linux | `~/.config/google-chrome` | `<profile>/Preferences` |
 
+Every directory with a `Preferences` file is a profile, except `Guest Profile` and `System Profile`.
+
 Content script sites come from `active_permissions.scriptable_host`, which the `chrome.management` API does not expose.
 
 ## Configuration

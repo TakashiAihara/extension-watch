@@ -89,3 +89,19 @@ test("a directory with no profiles is an error", () => {
   mkdirSync(join(dir, "System Profile"));
   expect(() => readAll(dir)).toThrow("no Chrome profiles in");
 });
+
+test("a legacy integer bitmask of disable reasons is read as reason bits", () => {
+  dir = mkdtempSync(join(tmpdir(), "ew-profile-"));
+  writeProfile(dir, "Default", { abc: ext({ disable_reasons: 6 }), def: ext({ disable_reasons: 0 }) });
+  const { snapshot } = readAll(dir);
+  expect(snapshot["Default/abc"].disableReasons).toEqual([2, 4]);
+  expect(snapshot["Default/def"].disableReasons).toEqual([]);
+});
+
+test("guest and system profiles are not read", () => {
+  dir = mkdtempSync(join(tmpdir(), "ew-profile-"));
+  writeProfile(dir, "Default", { abc: ext() });
+  writeProfile(dir, "Guest Profile", { g: ext() });
+  writeProfile(dir, "System Profile", { s: ext() });
+  expect(Object.keys(readAll(dir).snapshot)).toEqual(["Default/abc"]);
+});

@@ -110,5 +110,6 @@ describe("split", () => {
     const parts = split(text, 5);
     expect(parts.join("")).toBe(text);
     expect(parts).toEqual(["aあa", "あa", "あa", "あa", "あ"]);
+    for (const p of parts) expect(new TextEncoder().encode(p).length).toBeLessThanOrEqual(5);
   });
 });
