@@ -62,7 +62,9 @@ async function reportError(config: Config, p: Paths, message: string) {
   console.error(`extension-watch: ${message}`);
   try {
     const f = errorFile(p);
-    if (existsSync(f) && readFileSync(f, "utf8") === message && Date.now() - statSync(f).mtimeMs < RESEND_ERROR_MS) return;
+    // mtime can be slightly ahead of Date.now() right after the write; only far-future times are distrusted.
+    const age = existsSync(f) ? Date.now() - statSync(f).mtimeMs : -Infinity;
+    if (age > -60_000 && age < RESEND_ERROR_MS && readFileSync(f, "utf8") === message) return;
     await send(config, message);
     writeAtomic(errorFile(p), message);
   } catch (err) {
@@ -96,10 +98,11 @@ async function check(config: Config, p: Paths): Promise<{ errors: string[]; send
   const next = read.snapshot;
   const errors = read.failed.map((f) => `cannot read Chrome profile ${f.profile}: ${f.message}`);
 
-  // First run: take a baseline instead of reporting every existing extension as new. Wait until
-  // every profile reads, or a profile that failed now would be reported as all new later.
+  // First run: take a baseline instead of reporting every existing extension as new. A profile
+  // that fails now is not in it, so its extensions are reported as installed once it reads;
+  // waiting for it instead would leave every profile uncompared while it stays broken.
   if (!existsSync(p.state)) {
-    if (!errors.length) writeAtomic(p.state, JSON.stringify(next));
+    writeAtomic(p.state, JSON.stringify(next));
     return { errors, sendFailed: false };
   }
   const prev = readState(p.state);

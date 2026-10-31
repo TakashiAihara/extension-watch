@@ -8,13 +8,17 @@ import { ext, writeProfile } from "./fixture";
 const received: string[] = [];
 const auth: (string | null)[] = [];
 let status = 200;
+// Bodies starting with this prefix are rejected even when status is 200.
+let rejectPrefix = "";
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   async fetch(req) {
     if (status !== 200) return new Response("", { status });
+    const body = await req.text();
+    if (rejectPrefix && body.startsWith(rejectPrefix)) return new Response("", { status: 500 });
     auth.push(req.headers.get("authorization"));
-    received.push(await req.text());
+    received.push(body);
     return new Response("{}");
   },
 });
@@ -35,6 +39,7 @@ beforeEach(() => {
   received.length = 0;
   auth.length = 0;
   status = 200;
+  rejectPrefix = "";
   writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: chrome() });
   writeProfile(chrome(), "Default", { abc: ext() });
 });
@@ -165,14 +170,28 @@ test("the same error is sent again after a day", async () => {
   const old = (Date.now() - 25 * 60 * 60 * 1000) / 1000;
   utimesSync(f, old, old);
   expect(await run(env, "linux")).toBe(1);
+  expect(await run(env, "linux")).toBe(1);
   expect(received.length).toBe(2);
 });
 
-test("no baseline is written while a profile cannot be read", async () => {
+test("an error file dated in the future does not hold the error back", async () => {
+  writeConfig({ ntfyUrl: `http://127.0.0.1:${server.port}/topic`, chromeUserDataDir: join(dir, "nowhere") });
+  expect(await run(env, "linux")).toBe(1);
+  const f = join(dir, "state", "extension-watch", "last-error.txt");
+  const future = (Date.now() + 60 * 60 * 1000) / 1000;
+  utimesSync(f, future, future);
+  expect(await run(env, "linux")).toBe(1);
+  expect(received.length).toBe(2);
+});
+
+test("a profile that fails on the first run does not hold back the others", async () => {
   writeProfile(chrome(), "Profile 2", {});
   writeFileSync(join(chrome(), "Profile 2", "Secure Preferences"), "{broken");
   expect(await run(env, "linux")).toBe(1);
-  expect(existsSync(join(dir, "state", "extension-watch", "state.json"))).toBe(false);
+  writeProfile(chrome(), "Default", { abc: ext({ manifest: { name: "Sample", version: "1.1" } }) });
+  expect(await run(env, "linux")).toBe(1);
+  expect(received[1]).toBe("Sample (abc) [Default]\nversion 1.0 -> 1.1");
+  expect(existsSync(join(dir, "state", "extension-watch", "state.json"))).toBe(true);
 });
 
 test("a profile that loses all its extensions is reported once", async () => {
@@ -188,11 +207,13 @@ test("the emptied-profile message is retried when its send fails", async () => {
   writeProfile(chrome(), "Profile 2", { def: ext() });
   await run(env, "linux");
   writeProfile(chrome(), "Profile 2", {});
-  status = 500;
+  writeProfile(chrome(), "Default", { abc: ext({ manifest: { name: "Sample", version: "1.1" } }) });
+  rejectPrefix = "[Profile 2]";
   expect(await run(env, "linux")).toBe(1);
-  status = 200;
+  rejectPrefix = "";
+  // Default's change went out in the failed run; only Profile 2's records were restored.
   expect(await run(env, "linux")).toBe(0);
-  expect(received).toEqual(["[Profile 2] no extensions found any more (was 1)"]);
+  expect(received).toEqual(["Sample (abc) [Default]\nversion 1.0 -> 1.1", "[Profile 2] no extensions found any more (was 1)"]);
 });
 
 test("an ntfyUrl that is not http(s) fails without sending", async () => {
