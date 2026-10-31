@@ -15,7 +15,7 @@ For every extension in every profile (Chrome's built-in extensions are skipped):
 - disabled, or a disable reason added (`user_action`, `permissions_increase`, ...)
 - blocklisted by Safe Browsing or the update server (`blacklist_state` / `omaha_blocklist_state` / `extension_telemetry_service_blocklist_state`, shown with Chrome's raw value)
 
-Removed extensions are dropped from the record without a message. The first run only records a baseline. A profile with no extensions is a valid baseline.
+Removed extensions, and the records of a deleted profile, are dropped without a message. The first run only records a baseline. A profile with no extensions is a valid baseline.
 
 ## Where it reads
 
@@ -92,4 +92,3 @@ bun test
 - The blocklist keys: none of them were present on the profiles measured, so their values have not been seen
 - Reading `Secure Preferences` while Chrome is writing it
 - macOS
-- A deleted profile drops its records without a message
