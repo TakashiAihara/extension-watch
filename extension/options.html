@@ -1,19 +1,54 @@
 <!doctype html>
+<html lang="en">
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>extension-watch</title>
-<p>
-  <label>
-    ntfy topic URL
-    <input id="url" type="url" size="60" pattern="https?://.+" placeholder="https://ntfy.example.com/topic" />
-  </label>
-</p>
-<p>
-  <label>
-    ntfy access token (optional)
-    <input id="token" type="password" size="40" autocomplete="off" placeholder="tk_..." />
-  </label>
-</p>
-<button id="save">Save</button>
-<p id="status"></p>
-<p>Last error: <span id="error"></span></p>
+<link rel="icon" href="icons/icon-32.png" />
+<link rel="stylesheet" href="options.css" />
+<main class="page">
+  <header class="page-header">
+    <div class="brand">
+      <img class="brand-icon" src="icons/icon.svg" alt="" width="44" height="44" />
+      <div>
+        <h1>extension-watch</h1>
+        <p>Monitors installed extensions and reports meaningful changes.</p>
+      </div>
+    </div>
+    <p id="state" class="state" data-state="unset" aria-live="polite"><span class="state-dot"></span><span id="state-text"></span></p>
+  </header>
+
+  <section class="card settings" aria-labelledby="delivery-heading">
+    <div class="card-heading">
+      <div>
+        <p class="eyebrow">Notifications</p>
+        <h2 id="delivery-heading">Delivery settings</h2>
+      </div>
+      <span class="pill">ntfy</span>
+    </div>
+    <p class="card-intro">Send a push message when an extension is installed, updated, gains or loses access, changes install type, or is disabled or enabled.</p>
+    <div class="field">
+      <label for="url">ntfy topic URL</label>
+      <input id="url" type="url" pattern="https?://.+" placeholder="https://ntfy.example.com/topic" aria-describedby="url-help" />
+      <span id="url-help" class="help">Each extension that changed gets its own message. Long messages are split into parts.</span>
+    </div>
+    <div class="field">
+      <label for="token">Access token <span>(optional)</span></label>
+      <input id="token" type="password" autocomplete="off" placeholder="tk_..." />
+    </div>
+    <div class="actions">
+      <button id="save" class="primary">Save settings</button>
+      <p id="status" class="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="card diagnostics" aria-labelledby="error-heading">
+    <div>
+      <p class="eyebrow">Diagnostics</p>
+      <h2 id="error-heading">Last error</h2>
+    </div>
+    <span id="error" class="mono"></span>
+  </section>
+
+  <p class="note">Extensions are checked inside this browser. Messages name the extension, its ID and what changed, and go only to the ntfy topic above.</p>
+</main>
 <script type="module" src="options.js"></script>
