@@ -49,7 +49,8 @@ export function diff(prev, next) {
     if ((!p || p.enabled) && !n.enabled) lines.push(`disabled (${n.disabledReason ?? "unknown"})`);
     // Re-enabling after a permissions_increase hold is when the new permissions start to apply, so that
     // reason is named; "unknown" (a user turning it back on) would only be noise.
-    if (p && !p.enabled && n.enabled) {
+    // === false: a record without the field (written before it existed) is not a disabled one.
+    if (p && p.enabled === false && n.enabled) {
       lines.push(p.disabledReason === "permissions_increase" ? "enabled (was permissions_increase)" : "enabled");
     }
     if (lines.length) changes.push({ id, message: `${n.name} (${id})\n${lines.join("\n")}` });
