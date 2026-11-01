@@ -8,8 +8,9 @@
     },
     "ntfyToken": {
       "title": "ntfy access token",
-      "description": "Sent as a bearer token. Used only together with ntfyUrl from the same policy.",
-      "type": "string"
+      "description": "Sent as a bearer token. Used only together with ntfyUrl from the same policy. Use a token that can only write to this topic.",
+      "type": "string",
+      "sensitiveValue": true
     }
   }
 }

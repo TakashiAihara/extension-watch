@@ -182,6 +182,46 @@ test("the options page rejects credentials in the URL and a token a header canno
   await page.close();
 });
 
+// Policy cannot be pushed without writing to the system policy directory, so these tests replace
+// chrome.storage.managed.get inside the extension with what a policy would return.
+test("a policy URL and its token replace the options page settings", async () => {
+  received.length = 0;
+  await watcher.evaluate(
+    ({ url }) => {
+      (globalThis as any).__managedGet = chrome.storage.managed.get;
+      (chrome.storage.managed as any).get = async () => ({ ntfyUrl: url, ntfyToken: "tk_policy" });
+      return chrome.storage.local.set({ ntfyToken: "tk_local" });
+    },
+    { url: `${ntfyUrl()}-policy` },
+  );
+  writeTarget("1.5", ["storage", "tabs"], [{ matches: ["<all_urls>"], js: ["cs.js"] }]);
+  await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
+  await waitFor(() => received.length > 0);
+  expect(new URL(received[0].url).pathname).toBe("/topic-policy");
+  expect(received[0].auth).toBe("Bearer tk_policy");
+
+  await watcher.evaluate(() => {
+    (chrome.storage.managed as any).get = (globalThis as any).__managedGet;
+    return chrome.storage.local.set({ ntfyToken: "" });
+  });
+}, 30000);
+
+test("the options page shows a policy URL read-only and hides the token", async () => {
+  const id = new URL(watcher.url()).host;
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    (chrome.storage.managed as any).get = async () => ({ ntfyUrl: "https://org.example.com/t", ntfyToken: "tk_policy" });
+  });
+  await page.goto(`chrome-extension://${id}/options.html`);
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent !== "");
+  expect(await page.inputValue("#url")).toBe("https://org.example.com/t");
+  expect(await page.inputValue("#token")).toBe("");
+  expect(await page.getAttribute("#token", "placeholder")).toBe("Set by your administrator");
+  for (const sel of ["#url", "#token", "#save"]) expect(await page.isDisabled(sel)).toBe(true);
+  expect(await page.textContent("#status")).toBe("Set by your administrator through policy");
+  await page.close();
+});
+
 test("disabling an extension is sent", async () => {
   received.length = 0;
   await watcher.evaluate(async () => {

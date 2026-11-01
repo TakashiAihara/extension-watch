@@ -34,7 +34,10 @@ An administrator can install the extension on every managed browser and push the
 
 Force-install it with the `ExtensionInstallForcelist` policy. A force-installed extension cannot be disabled or removed by the user.
 
-On Windows and macOS, Chrome only installs extensions whose update URL points to the Chrome Web Store ("On Windows and macOS, the update_URL must point to the Chrome Web Store", developer.chrome.com, Install extensions). The extension therefore has to be published there (an unlisted listing is enough) before it can be force-installed on those platforms.
+Where the extension can come from depends on how the browsers are managed (the policy description in Chromium's `ExtensionInstallForcelist.yaml`):
+
+- On Windows joined to Active Directory or Entra ID, on macOS managed by MDM or joined via MCX, and on any browser enrolled in Chrome Enterprise Core, a self-hosted CRX with its own update URL can be force-installed
+- Elsewhere, it has to come from the Chrome Web Store (an unlisted listing is enough)
 
 ### Settings
 
@@ -45,9 +48,20 @@ The extension declares a policy schema (`extension/schema.json`), so the ntfy se
 | `ntfyUrl` | The ntfy topic URL. When set, it replaces the URL on the options page, which then shows it read-only |
 | `ntfyToken` | The access token for that URL. It is used only together with `ntfyUrl` from the same policy, never with a token typed on the options page |
 
-On Windows, for example, the values go under `HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome\3rdparty\extensions\<extension id>\policy`. The same credential rules apply as on the options page (https only, except loopback).
+Where the values go:
 
-Chrome Enterprise Core can already list extensions, block them, and force-install them. This extension adds what Core does not do on its own: a notification the moment an extension is updated, changes permissions, or is disabled or enabled.
+- Windows: string values under `HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome\3rdparty\extensions\<extension id>\policy`
+- macOS: a configuration profile for the preference domain `com.google.Chrome.extensions.<extension id>`
+- Chrome Enterprise Core: the extension's policy JSON in the Admin console
+
+Notes:
+
+- The same credential rules apply as on the options page: https only (except loopback), no `user:pass@`
+- Use a token that can only write to this topic. `ntfyToken` is marked `sensitiveValue` in the schema
+- A policy URL gets no host permission, so sending relies on the server's CORS headers. Measured with Chromium 156: an extension without host permission sent a POST with an `Authorization` header to ntfy (which answers the preflight with `access-control-allow-origin: *` and `access-control-allow-headers: *`) and got ntfy's own 401 for a wrong token, so the header reached the server. A proxy in front of ntfy that drops those headers would break sending
+- Every browser posts to the same topic, and a message does not say which browser it came from yet (issue #9)
+
+This extension's role next to Chrome Enterprise Core: it sends a push notification the moment an extension is updated, changes permissions, or is disabled or enabled, with the permissions that were added or removed.
 
 ## Test
 
@@ -71,5 +85,5 @@ bun test
 ## Not verified
 
 - The event order and the reported permissions for a store auto-update, and for an update Chrome disables with `permissions_increase` (the added permissions may only appear once the update is accepted)
-- Settings pushed by policy: the tests run without a policy, so reading managed storage, the read-only options page, and policy changes triggering a check have not been run in a browser
-- A policy URL gets no host permission, so sending to it relies on the server's CORS headers. ntfy answers the preflight with `access-control-allow-origin: *` and `access-control-allow-headers: *` (measured against a real server); the tests send a token through a fake server with the same headers and no host permission, which Chromium 156 accepts
+- Settings pushed by a real policy: the tests replace `chrome.storage.managed.get` instead, because pushing a policy needs the system policy directory
+

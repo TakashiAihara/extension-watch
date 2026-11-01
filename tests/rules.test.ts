@@ -58,3 +58,7 @@ test("without a policy URL the options page settings are used, even if a policy 
   expect(pickConfig({ ntfyToken: "tk_org" }, local)).toEqual({ ...local, managed: false });
   expect(pickConfig({}, {})).toEqual({ ntfyUrl: undefined, ntfyToken: "", managed: false });
 });
+
+test("user:pass@ in the URL is refused for every source of the URL", () => {
+  expect(tokenProblem("https://u:p@ntfy.example.com/t", "")).toBe("Use an access token, or ?auth= in the URL, instead of user:pass@");
+});

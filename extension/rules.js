@@ -5,6 +5,9 @@ const LOOPBACK = ["127.0.0.1", "localhost", "[::1]"];
 // Returns why a URL and token cannot be used together, or "" when they can.
 export function tokenProblem(url, token) {
   const u = new URL(url);
+  // fetch rejects URLs with credentials. ntfy takes an access token in the token field, or a whole
+  // Authorization header value as ?auth= (base64url-encoded).
+  if (u.username || u.password) return "Use an access token, or ?auth= in the URL, instead of user:pass@";
   // Every value counts: a second ?auth= still travels in the URL even though ntfy reads only the first.
   const inUrl = AUTH_PARAMS.some((k) => u.searchParams.getAll(k).some((v) => v));
   if (token) {
@@ -25,11 +28,8 @@ export function pickConfig(managed, local) {
   return { ntfyUrl: local?.ntfyUrl, ntfyToken: local?.ntfyToken ?? "", managed: false };
 }
 
-// chrome.storage.managed throws when no policy schema applies (unpacked builds without one, tests).
-export async function readManaged() {
-  try {
-    return await chrome.storage.managed.get(["ntfyUrl", "ntfyToken"]);
-  } catch {
-    return {};
-  }
+// Returns {} when no policy is set (the manifest always declares the schema). A failure is not caught:
+// falling back to the options page would send around a policy the administrator set.
+export function readManaged() {
+  return chrome.storage.managed.get(["ntfyUrl", "ntfyToken"]);
 }
