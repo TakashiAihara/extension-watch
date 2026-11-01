@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "ntfyUrl": {
+      "title": "ntfy topic URL",
+      "description": "Where notifications are sent, for example https://ntfy.example.com/extension-watch. When set, it replaces the URL on the options page.",
+      "type": "string"
+    },
+    "ntfyToken": {
+      "title": "ntfy access token",
+      "description": "Sent as a bearer token. Used only together with ntfyUrl from the same policy. Use a token that can only write to this topic.",
+      "type": "string",
+      "sensitiveValue": true
+    }
+  }
+}

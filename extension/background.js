@@ -1,5 +1,5 @@
 import { diff, snapshot, split } from "./diff.js";
-import { tokenProblem } from "./rules.js";
+import { authParam, pickConfig, readManaged, tokenProblem } from "./rules.js";
 
 // A reload fires onDisabled(old), onEnabled(new) and onInstalled(new) within ~10 ms (measured on
 // Chrome for Testing 156). Waiting lets them read as one update; 2 s is margin, as the order of a
@@ -36,12 +36,13 @@ async function check() {
 }
 
 async function run() {
-  const { extensions: prev, ntfyUrl, ntfyToken, warningsLang } = await chrome.storage.local.get([
+  const local = await chrome.storage.local.get([
     "extensions",
     "ntfyUrl",
     "ntfyToken",
     "warningsLang",
   ]);
+  const { extensions: prev, warningsLang } = local;
   const infos = await chrome.management.getAll();
   const warnings = {};
   // Throws for an extension uninstalled since getAll; keep the old warnings so no change is reported.
@@ -65,9 +66,13 @@ async function run() {
   // extension keeps its old record, so the same change is sent on the next check.
   const saved = { ...next };
   let error;
-  for (const { id, message } of diff(prev, next)) {
+  const changes = diff(prev, next);
+  // Read where to send only when there is something to send, so a policy that cannot be read holds
+  // the changes (the throw keeps the old records) without blocking the baseline above.
+  const { ntfyUrl, ntfyToken, managed } = changes.length ? pickConfig(await readManaged(), local) : {};
+  for (const { id, message } of changes) {
     try {
-      await send(ntfyUrl, ntfyToken, message);
+      await send(ntfyUrl, ntfyToken, message, managed);
     } catch (err) {
       error ??= err;
       if (prev[id]) saved[id] = prev[id];
@@ -79,13 +84,17 @@ async function run() {
   if (error) throw error;
 }
 
-async function send(ntfyUrl, ntfyToken, message) {
+async function send(ntfyUrl, ntfyToken, message, fromPolicy) {
   if (!ntfyUrl) throw new Error("ntfy URL is not set");
   const problem = tokenProblem(ntfyUrl, ntfyToken);
   if (problem) throw new Error(problem);
-  const headers = ntfyToken ? { Authorization: `Bearer ${ntfyToken}` } : {};
   const url = new URL(ntfyUrl);
   url.searchParams.set("title", "extension-watch");
+  // A policy URL has no host permission, so an Authorization header would need a CORS preflight that
+  // allows it, and ntfy's "Access-Control-Allow-Headers: *" covers it only through non-standard
+  // Chromium leniency. ntfy also reads the header value from ?auth=, which keeps it a simple request.
+  if (ntfyToken && fromPolicy) url.searchParams.set("auth", authParam(ntfyToken));
+  const headers = ntfyToken && !fromPolicy ? { Authorization: `Bearer ${ntfyToken}` } : {};
   const parts = split(message, MAX_BYTES);
   // A failed part fails the whole extension, so parts sent before it are sent again on the retry.
   for (const [i, part] of parts.entries()) {

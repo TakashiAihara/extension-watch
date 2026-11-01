@@ -182,6 +182,131 @@ test("the options page rejects credentials in the URL and a token a header canno
   await page.close();
 });
 
+// Policy cannot be pushed without writing to the system policy directory, so these tests replace
+// chrome.storage.managed.get inside the extension with what a policy would return.
+test("a policy URL and its token replace the options page settings", async () => {
+  received.length = 0;
+  await watcher.evaluate(
+    ({ url }) => {
+      (globalThis as any).__managedGet = chrome.storage.managed.get;
+      (chrome.storage.managed as any).get = async () => ({ ntfyUrl: url, ntfyToken: "tk_policy" });
+      return chrome.storage.local.set({ ntfyToken: "tk_local" });
+    },
+    { url: `${ntfyUrl()}-policy` },
+  );
+  try {
+    writeTarget("1.5", ["storage", "tabs"], [{ matches: ["<all_urls>"], js: ["cs.js"] }]);
+    await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
+    await waitFor(() => received.length > 0);
+    // No host permission for a policy URL, so the token travels as ?auth= in a simple request, not a header.
+    const sent = new URL(received[0].url);
+    expect(sent.pathname).toBe("/topic-policy");
+    expect(received[0].auth).toBeNull();
+    expect(atob(sent.searchParams.get("auth")!.replace(/-/g, "+").replace(/_/g, "/"))).toBe("Bearer tk_policy");
+  } finally {
+    await watcher.evaluate(() => {
+      (chrome.storage.managed as any).get = (globalThis as any).__managedGet;
+      return chrome.storage.local.set({ ntfyToken: "" });
+    });
+  }
+}, 30000);
+
+test("the options page shows a policy URL read-only and hides the token", async () => {
+  const id = new URL(watcher.url()).host;
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    (chrome.storage.managed as any).get = async () => ({ ntfyUrl: "https://org.example.com/t", ntfyToken: "tk_policy" });
+  });
+  await page.goto(`chrome-extension://${id}/options.html`);
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent !== "");
+  expect(await page.inputValue("#url")).toBe("https://org.example.com/t");
+  expect(await page.inputValue("#token")).toBe("");
+  expect(await page.getAttribute("#token", "placeholder")).toBe("Set by your administrator");
+  for (const sel of ["#url", "#token", "#save"]) expect(await page.isDisabled(sel)).toBe(true);
+  expect(await page.textContent("#status")).toBe("Set by your administrator through policy");
+  await page.close();
+});
+
+test("a policy that cannot be read stops sending and shows the error instead of using the options page", async () => {
+  received.length = 0;
+  await watcher.evaluate(() => {
+    (globalThis as any).__managedGet = chrome.storage.managed.get;
+    (chrome.storage.managed as any).get = async () => {
+      throw new Error("policy broken");
+    };
+  });
+  try {
+    writeTarget("1.6", ["storage", "tabs"], [{ matches: ["<all_urls>"], js: ["cs.js"] }]);
+    await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
+    await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError))?.endsWith("policy broken") ?? false);
+    expect(await watcher.evaluate(() => chrome.action.getBadgeText({}))).toBe("!");
+    expect(received).toEqual([]);
+  } finally {
+    await watcher.evaluate(() => {
+      (chrome.storage.managed as any).get = (globalThis as any).__managedGet;
+    });
+  }
+
+  // Once the policy reads again, the held change is sent.
+  await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: `${url}?again=1` }), ntfyUrl());
+  await waitFor(() => received.length > 0);
+  expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.5 -> 1\.6$/);
+}, 30000);
+
+test("the options page shows a policy it cannot read", async () => {
+  const id = new URL(watcher.url()).host;
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    (chrome.storage.managed as any).get = async () => {
+      throw new Error("policy broken");
+    };
+  });
+  await page.goto(`chrome-extension://${id}/options.html`);
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent !== "");
+  expect(await page.textContent("#status")).toBe("Cannot read the policy: policy broken");
+  await page.close();
+});
+
+test("a policy URL without a token leaves the token placeholder empty", async () => {
+  const id = new URL(watcher.url()).host;
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    (chrome.storage.managed as any).get = async () => ({ ntfyUrl: "https://org.example.com/t" });
+  });
+  await page.goto(`chrome-extension://${id}/options.html`);
+  await page.waitForFunction(() => document.querySelector("#status")?.textContent !== "");
+  expect(await page.getAttribute("#token", "placeholder")).toBe("");
+  expect(await page.isDisabled("#save")).toBe(true);
+  await page.close();
+});
+
+test("the baseline is taken even while the policy cannot be read", async () => {
+  received.length = 0;
+  const saved = await watcher.evaluate(async () => (await chrome.storage.local.get("extensions")).extensions);
+  await watcher.evaluate(() => {
+    (globalThis as any).__managedGet = chrome.storage.managed.get;
+    (chrome.storage.managed as any).get = async () => {
+      throw new Error("policy broken");
+    };
+    return chrome.storage.local.remove("extensions");
+  });
+  try {
+    // Any event triggers a check; with no stored records it only writes the baseline.
+    await watcher.evaluate(() => chrome.storage.local.set({ lastError: "trigger" }));
+    await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: `${url}?baseline=1` }), ntfyUrl());
+    await waitForAsync(async () => !!(await watcher.evaluate(async () => (await chrome.storage.local.get("extensions")).extensions)));
+    expect(received).toEqual([]);
+  } finally {
+    await watcher.evaluate(
+      (ext) => {
+        (chrome.storage.managed as any).get = (globalThis as any).__managedGet;
+        return chrome.storage.local.set({ extensions: ext });
+      },
+      saved,
+    );
+  }
+}, 30000);
+
 test("disabling an extension is sent", async () => {
   received.length = 0;
   await watcher.evaluate(async () => {
