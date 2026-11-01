@@ -200,10 +200,14 @@ test("re-enabling an extension is sent", async () => {
       await chrome.management.setEnabled(t!.id, on);
     }, enabled);
 
-  // Start from a disabled target regardless of earlier tests, and let that change be sent first.
-  received.length = 0;
+  // Start from a disabled target regardless of earlier tests, and wait until the watcher has stored it.
   await setTarget(false);
-  await Bun.sleep(3000);
+  await waitForAsync(() =>
+    watcher.evaluate(async () => {
+      const { extensions } = await chrome.storage.local.get("extensions");
+      return Object.values(extensions ?? {}).some((r: any) => r.name === "Target" && r.enabled === false);
+    }),
+  );
   received.length = 0;
   await setTarget(true);
 
