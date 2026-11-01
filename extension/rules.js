@@ -5,7 +5,8 @@ const LOOPBACK = ["127.0.0.1", "localhost", "[::1]"];
 // Returns why a URL and token cannot be used together, or "" when they can.
 export function tokenProblem(url, token) {
   const u = new URL(url);
-  const inUrl = AUTH_PARAMS.some((k) => u.searchParams.get(k));
+  // Every value counts: a second ?auth= still travels in the URL even though ntfy reads only the first.
+  const inUrl = AUTH_PARAMS.some((k) => u.searchParams.getAll(k).some((v) => v));
   if (token) {
     // ntfy tokens are tk_ plus letters and digits; a space or other character means a bad paste.
     if (!/^[\x21-\x7e]+$/.test(token)) return "The token must be printable ASCII without spaces";

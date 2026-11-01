@@ -33,3 +33,8 @@ test("a token together with credentials in the URL is refused; an empty paramete
   expect(tokenProblem("https://ntfy.example.com/t?authorization=abc", T)).toBe(both);
   expect(tokenProblem("https://ntfy.example.com/t?auth=", T)).toBe("");
 });
+
+test("a repeated parameter with credentials after an empty one still counts", () => {
+  expect(tokenProblem("http://ntfy.example.com/t?auth=&auth=abc", "")).toBe("Credentials need an https URL");
+  expect(tokenProblem("http://ntfy.example.com/t?authorization=&authorization=abc", "")).toBe("Credentials need an https URL");
+});
