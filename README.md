@@ -11,6 +11,7 @@ A Manifest V3 extension that sends a message to an [ntfy](https://ntfy.sh) topic
 - gains or loses permissions, host permissions, or permission warnings
 - changes install type
 - gets disabled, with Chrome's reason (`permissions_increase` when Chrome holds an update until new permissions are accepted)
+- is enabled again, with the reason it had been disabled for (re-enabling after `permissions_increase` is when the new permissions start to apply)
 
 Permission warnings (`management.getPermissionWarningsById`) are compared because `hostPermissions` does not include content-script matches: an update that adds a content script on all sites shows up only as a new warning.
 
@@ -40,7 +41,7 @@ bun test
 - a change rejected for a missing token (HTTP 403) is sent once a token is saved, as `Authorization: Bearer`
 - a stored token is not sent over http to a host other than loopback
 - the options page refuses `user:pass@`, non-http(s) URLs, tokens with spaces, and a token over http (saving itself waits on Chrome's permission prompt, so it is checked by hand)
-- disabling the target is sent
+- disabling the target is sent, and so is enabling it again
 
 `tests/rules.test.ts` covers the URL and token checks the options page and the sender share.
 

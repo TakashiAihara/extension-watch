@@ -47,6 +47,8 @@ export function diff(prev, next) {
       if (p.installType !== n.installType) lines.push(`installType ${p.installType} -> ${n.installType}`);
     }
     if ((!p || p.enabled) && !n.enabled) lines.push(`disabled (${n.disabledReason ?? "unknown"})`);
+    // Re-enabling after a permissions_increase hold is when the new permissions start to apply.
+    if (p && !p.enabled && n.enabled) lines.push(p.disabledReason ? `enabled (was ${p.disabledReason})` : "enabled");
     if (lines.length) changes.push({ id, message: `${n.name} (${id})\n${lines.join("\n")}` });
   }
   return changes;
