@@ -9,13 +9,15 @@ import { chromium, type BrowserContext, type Worker } from "playwright";
 const received: { url: string; body: string; auth: string | null }[] = [];
 let rejected = 0;
 let failing = false;
+let requireAuth = false;
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   async fetch(req) {
     // ntfy answers the preflight a token header triggers; the real run skips it with the host permission.
-    const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization" };
+    const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" };
     if (req.method !== "POST") return new Response("{}", { headers });
+    if (requireAuth && !req.headers.get("authorization")) return new Response("{}", { status: 403, headers });
     if (failing) {
       rejected++;
       return new Response("{}", { status: 500, headers });
@@ -134,15 +136,47 @@ test("a rejected send is retried with the same change", async () => {
   await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError)) === null);
 }, 30000);
 
-test("a saved token is sent as a bearer header", async () => {
+test("a change rejected for a missing token is sent once a token is saved", async () => {
   received.length = 0;
-  await watcher.evaluate(() => chrome.storage.local.set({ ntfyToken: "test-token-123" }));
+  requireAuth = true;
   writeTarget("1.3", ["storage", "tabs"], [{ matches: ["<all_urls>"], js: ["cs.js"] }]);
   await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
+  await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError))?.includes("ntfy 403") ?? false);
+
+  // Only the token changes; no extension event fires, so the token change itself must trigger the check.
+  await watcher.evaluate(() => chrome.storage.local.set({ ntfyToken: "fake-token-for-test" }));
   await waitFor(() => received.length > 0);
   expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.2 -> 1\.3$/);
-  expect(received[0].auth).toBe("Bearer test-token-123");
+  expect(received[0].auth).toBe("Bearer fake-token-for-test");
+
+  requireAuth = false;
+  await watcher.evaluate(() => chrome.storage.local.set({ ntfyToken: "" }));
 }, 30000);
+
+test("a stored token is not sent over http to another host", async () => {
+  received.length = 0;
+  await watcher.evaluate(() => chrome.storage.local.set({ ntfyUrl: "http://ntfy.invalid.test/topic", ntfyToken: "fake-token-for-test" }));
+  writeTarget("1.4", ["storage", "tabs"], [{ matches: ["<all_urls>"], js: ["cs.js"] }]);
+  await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
+  await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError))?.endsWith("A token needs an https URL") ?? false);
+  expect(received).toEqual([]);
+
+  await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url, ntfyToken: "" }), ntfyUrl());
+  await waitFor(() => received.length > 0);
+  expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.3 -> 1\.4$/);
+}, 30000);
+
+test("the options page shows the saved token and clears it when the server changes", async () => {
+  await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url, ntfyToken: "saved-token" }), ntfyUrl());
+  const id = new URL(watcher.url()).host;
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${id}/options.html`);
+  expect(await page.inputValue("#token")).toBe("saved-token");
+  await page.fill("#url", ntfyUrl().replace("127.0.0.1", "localhost"));
+  expect(await page.inputValue("#token")).toBe("");
+  await page.close();
+  await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url, ntfyToken: "" }), ntfyUrl());
+});
 
 test("the options page rejects credentials in the URL and a token a header cannot hold", async () => {
   const id = new URL(watcher.url()).host;
@@ -154,9 +188,10 @@ test("the options page rejects credentials in the URL and a token a header canno
     await page.click("#save");
     return page.textContent("#status");
   };
-  expect(await status("https://u:p@ntfy.example.com/t", "")).toBe("Put credentials in the token field, not in user:pass@");
+  expect(await status("https://u:p@ntfy.example.com/t", "")).toBe("Use an access token, or ?auth= in the URL, instead of user:pass@");
   expect(await status("ftp://ntfy.example.com/t", "")).toBe("Enter an http(s) URL");
-  expect(await status("https://ntfy.example.com/t", "bad token")).toBe("The token has characters a header cannot hold");
+  expect(await status("https://ntfy.example.com/t", "bad token")).toBe("The token must be printable ASCII without spaces");
+  expect(await status("http://ntfy.example.com/t", "tk_abc")).toBe("A token needs an https URL");
   await page.close();
 });
 

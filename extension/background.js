@@ -1,4 +1,5 @@
 import { diff, snapshot, split } from "./diff.js";
+import { tokenProblem } from "./rules.js";
 
 // A reload fires onDisabled(old), onEnabled(new) and onInstalled(new) within ~10 ms (measured on
 // Chrome for Testing 156). Waiting lets them read as one update; 2 s is margin, as the order of a
@@ -80,8 +81,8 @@ async function run() {
 
 async function send(ntfyUrl, ntfyToken, message) {
   if (!ntfyUrl) throw new Error("ntfy URL is not set");
-  // A token a header cannot hold would be quoted in fetch's error message, which lands in lastError.
-  if (ntfyToken && !/^[\x21-\x7e]+$/.test(ntfyToken)) throw new Error("ntfy token has characters a header cannot hold");
+  const problem = tokenProblem(ntfyUrl, ntfyToken);
+  if (problem) throw new Error(problem);
   const headers = ntfyToken ? { Authorization: `Bearer ${ntfyToken}` } : {};
   const url = new URL(ntfyUrl);
   url.searchParams.set("title", "extension-watch");
