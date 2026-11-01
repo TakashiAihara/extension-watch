@@ -10,7 +10,7 @@ export function tokenProblem(url, token) {
     // ntfy tokens are tk_ plus letters and digits; a space or other character means a bad paste.
     if (!/^[\x21-\x7e]+$/.test(token)) return "The token must be printable ASCII without spaces";
     // ntfy reads the query parameter instead of the Authorization header when both are present.
-    if (inUrl) return "Use either the token field or ?auth= in the URL, not both";
+    if (inUrl) return "Use either the token field or credentials in the URL, not both";
   }
   // Loopback stays allowed for local testing; anywhere else the credentials would travel in cleartext.
   if ((token || inUrl) && u.protocol === "http:" && !LOOPBACK.includes(u.hostname)) return "Credentials need an https URL";

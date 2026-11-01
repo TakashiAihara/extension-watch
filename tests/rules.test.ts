@@ -28,7 +28,7 @@ test("a token with a space, a control character or non-ASCII is refused", () => 
 });
 
 test("a token together with credentials in the URL is refused; an empty parameter is ignored", () => {
-  const both = "Use either the token field or ?auth= in the URL, not both";
+  const both = "Use either the token field or credentials in the URL, not both";
   expect(tokenProblem("https://ntfy.example.com/t?auth=abc", T)).toBe(both);
   expect(tokenProblem("https://ntfy.example.com/t?authorization=abc", T)).toBe(both);
   expect(tokenProblem("https://ntfy.example.com/t?auth=", T)).toBe("");
