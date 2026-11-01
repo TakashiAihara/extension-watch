@@ -33,3 +33,8 @@ export function pickConfig(managed, local) {
 export function readManaged() {
   return chrome.storage.managed.get(["ntfyUrl", "ntfyToken"]);
 }
+
+// ntfy's ?auth= takes the whole Authorization header value, base64url-encoded without padding.
+export function authParam(token) {
+  return btoa(`Bearer ${token}`).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}

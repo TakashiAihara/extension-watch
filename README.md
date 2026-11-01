@@ -32,12 +32,13 @@ An administrator can install the extension on every managed browser and push the
 
 ### Install
 
-Force-install it with the `ExtensionInstallForcelist` policy. A force-installed extension cannot be disabled or removed by the user.
+Force-install it with the `ExtensionInstallForcelist` policy. Chrome keeps a force-installed extension from being disabled or removed by the user (on a best-effort basis, per the policy description).
 
 Where the extension can come from depends on how the browsers are managed (the policy description in Chromium's `ExtensionInstallForcelist.yaml`):
 
-- On Windows joined to Active Directory or Entra ID, on macOS managed by MDM or joined via MCX, and on any browser enrolled in Chrome Enterprise Core, a self-hosted CRX with its own update URL can be force-installed
-- Elsewhere, it has to come from the Chrome Web Store (an unlisted listing is enough)
+- Windows joined to Active Directory or Entra ID or enrolled in Chrome Enterprise Core, and macOS managed by MDM, joined via MCX, or enrolled in Chrome Enterprise Core, can force-install a self-hosted CRX
+- Other Windows and macOS machines can only force-install from the Chrome Web Store (an unlisted listing is enough). Linux has no such restriction
+- Self-hosting is not set up in this repository yet: the policy's update URL is used only for the first install, later updates come from `update_url` in the manifest, which is not set, and the CRX must be signed with the key that gives the extension its ID
 
 ### Settings
 
@@ -56,9 +57,9 @@ Where the values go:
 
 Notes:
 
-- The same credential rules apply as on the options page: https only (except loopback), no `user:pass@`
+- The same credential rules apply as on the options page: https only (except loopback), no `user:pass@`. A policy that cannot be read stops sending on that browser (the badge shows `!`); changes are held and sent once it reads again
 - Use a token that can only write to this topic. `ntfyToken` is marked `sensitiveValue` in the schema
-- A policy URL gets no host permission, so sending relies on the server's CORS headers. Measured with Chromium 156: an extension without host permission sent a POST with an `Authorization` header to ntfy (which answers the preflight with `access-control-allow-origin: *` and `access-control-allow-headers: *`) and got ntfy's own 401 for a wrong token, so the header reached the server. A proxy in front of ntfy that drops those headers would break sending
+- A policy URL gets no host permission, so the token is sent as `?auth=` (ntfy's query form of the Authorization header) to keep the POST a CORS simple request with no preflight. An `Authorization` header would need the server to allow it in the preflight; ntfy answers with `access-control-allow-headers: *`, which the Fetch spec does not count for `Authorization` and Chromium accepts only through a deprecated leniency. The token is therefore visible in URLs the server or a proxy logs. The response still needs `access-control-allow-origin`, which ntfy sends as `*`
 - Every browser posts to the same topic, and a message does not say which browser it came from yet (issue #9)
 
 This extension's role next to Chrome Enterprise Core: it sends a push notification the moment an extension is updated, changes permissions, or is disabled or enabled, with the permissions that were added or removed.
@@ -85,5 +86,5 @@ bun test
 ## Not verified
 
 - The event order and the reported permissions for a store auto-update, and for an update Chrome disables with `permissions_increase` (the added permissions may only appear once the update is accepted)
-- Settings pushed by a real policy: the tests replace `chrome.storage.managed.get` instead, because pushing a policy needs the system policy directory
+- Settings pushed by a real policy: the tests replace `chrome.storage.managed.get` inside the extension instead of installing a policy
 
