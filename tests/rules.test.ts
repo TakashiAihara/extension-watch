@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { pickConfig, tokenProblem } from "../extension/rules.js";
+import { authParam, pickConfig, tokenProblem } from "../extension/rules.js";
 
 const T = "tk_sample0";
 
@@ -61,4 +61,9 @@ test("without a policy URL the options page settings are used, even if a policy 
 
 test("user:pass@ in the URL is refused for every source of the URL", () => {
   expect(tokenProblem("https://u:p@ntfy.example.com/t", "")).toBe("Use an access token, or ?auth= in the URL, instead of user:pass@");
+});
+
+test("authParam is base64url of the whole header value, without padding", () => {
+  // Standard base64 of "Bearer tk_%~7m?u4" is QmVhcmVyIHRrXyV+N20/dTQ= (has +, / and padding).
+  expect(authParam("tk_%~7m?u4")).toBe("QmVhcmVyIHRrXyV-N20_dTQ");
 });

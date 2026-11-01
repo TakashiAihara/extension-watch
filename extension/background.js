@@ -43,7 +43,6 @@ async function run() {
     "warningsLang",
   ]);
   const { extensions: prev, warningsLang } = local;
-  const { ntfyUrl, ntfyToken, managed } = pickConfig(await readManaged(), local);
   const infos = await chrome.management.getAll();
   const warnings = {};
   // Throws for an extension uninstalled since getAll; keep the old warnings so no change is reported.
@@ -67,7 +66,11 @@ async function run() {
   // extension keeps its old record, so the same change is sent on the next check.
   const saved = { ...next };
   let error;
-  for (const { id, message } of diff(prev, next)) {
+  const changes = diff(prev, next);
+  // Read where to send only when there is something to send, so a policy that cannot be read holds
+  // the changes (the throw keeps the old records) without blocking the baseline above.
+  const { ntfyUrl, ntfyToken, managed } = changes.length ? pickConfig(await readManaged(), local) : {};
+  for (const { id, message } of changes) {
     try {
       await send(ntfyUrl, ntfyToken, message, managed);
     } catch (err) {
