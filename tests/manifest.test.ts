@@ -12,6 +12,7 @@ test("the manifest declares the policy schema with both keys and a masked token"
 
 test("every icon the manifest names is a PNG of the declared size", () => {
   expect(Object.keys(manifest.icons).sort()).toEqual(["128", "16", "32", "48"]);
+  expect(Object.keys(manifest.action.default_icon).sort()).toEqual(["16", "32"]);
   // Checked one map at a time so an entry in one cannot hide a wrong entry with the same key in the other.
   const entries = [...Object.entries(manifest.icons), ...Object.entries(manifest.action.default_icon)];
   for (const [size, path] of entries) {

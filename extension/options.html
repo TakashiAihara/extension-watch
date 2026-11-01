@@ -25,11 +25,11 @@
       </div>
       <span class="pill">ntfy</span>
     </div>
-    <p class="card-intro">Send a push message when an extension is installed, changes version or access, or is disabled or enabled.</p>
+    <p class="card-intro">Send a push message when an installed extension is added, updated, gains or loses access, or is disabled or enabled.</p>
     <div class="field">
       <label for="url">ntfy topic URL</label>
       <input id="url" type="url" pattern="https?://.+" placeholder="https://ntfy.example.com/topic" aria-describedby="url-help" />
-      <span id="url-help" class="help">The topic receives one message for each extension that changed.</span>
+      <span id="url-help" class="help">Each extension that changed gets its own message. Long messages are split into parts.</span>
     </div>
     <div class="field">
       <label for="token">Access token <span>(optional)</span></label>
@@ -49,6 +49,6 @@
     <span id="error" class="mono"></span>
   </section>
 
-  <p class="note">Extensions are checked inside this browser. Each message carries the extension's name, ID, version and the permissions or host patterns that changed, and goes only to the ntfy topic above.</p>
+  <p class="note">Extensions are checked inside this browser. Messages name the extension, its ID and what changed, and go only to the ntfy topic above.</p>
 </main>
 <script type="module" src="options.js"></script>

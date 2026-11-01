@@ -199,6 +199,12 @@ test("the options page header follows the configured URL and the last error", as
     expect(await state()).toEqual(["unset", "Not configured"]);
     await watcher.evaluate(() => chrome.storage.local.remove("lastError"));
 
+    // Only local storage holds the settings; the same key in sync storage is not a URL.
+    await watcher.evaluate((url) => chrome.storage.sync.set({ ntfyUrl: url }), ntfyUrl());
+    await page.waitForTimeout(300);
+    expect(await state()).toEqual(["unset", "Not configured"]);
+    await watcher.evaluate(() => chrome.storage.sync.remove("ntfyUrl"));
+
     await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), ntfyUrl());
     // Within the background's 2 s settle delay, so the page reacts to the URL itself, not to the check it triggers.
     await page.waitForFunction(() => document.querySelector("#state")?.getAttribute("data-state") !== "unset", null, { timeout: 1000 });
@@ -314,11 +320,23 @@ test("the options page shows a policy it cannot read", async () => {
       throw new Error("policy broken");
     };
   });
-  await page.goto(`chrome-extension://${id}/options.html`);
-  await page.waitForFunction(() => document.querySelector("#status")?.textContent !== "");
-  expect(await page.textContent("#status")).toBe("Cannot read the policy: policy broken");
-  expect(await page.getAttribute("#state", "data-state")).toBe("error");
-  await page.close();
+  // No saved URL and no last error: the unreadable policy alone must make the header say Error.
+  const saved = await watcher.evaluate(() => chrome.storage.local.get(["ntfyUrl", "lastError"]));
+  await watcher.evaluate(() => chrome.storage.local.remove(["ntfyUrl", "lastError"]));
+  try {
+    await page.goto(`chrome-extension://${id}/options.html`);
+    await page.waitForFunction(() => document.querySelector("#status")?.textContent !== "");
+    expect(await page.textContent("#status")).toBe("Cannot read the policy: policy broken");
+    expect(await page.getAttribute("#state", "data-state")).toBe("error");
+
+    // A later check that clears lastError does not mean the policy reads again.
+    await watcher.evaluate(() => chrome.storage.local.set({ lastError: null }));
+    await page.waitForFunction(() => document.querySelector("#error")?.textContent === "none");
+    expect(await page.getAttribute("#state", "data-state")).toBe("error");
+  } finally {
+    await watcher.evaluate((s) => chrome.storage.local.set(s), saved);
+    await page.close();
+  }
 });
 
 test("a policy URL without a token leaves the token placeholder empty", async () => {
