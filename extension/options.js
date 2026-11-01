@@ -14,8 +14,8 @@ const show = (text, kind = "") => {
 };
 
 const STATES = { watching: "Watching", unset: "Not configured", error: "Error" };
-// The sender stops while the policy cannot be read, and that policy may hold the URL, so it comes first.
-// With no URL set, a send can only fail for that reason, so the header keeps saying Not configured.
+// Changes are held while the policy cannot be read, and that policy may hold the URL, so it comes first.
+// With no URL set, Not configured is the first thing to fix, so it wins over a stored last error.
 const renderState = () => {
   const key = policyError ? "error" : !configured ? "unset" : lastError ? "error" : "watching";
   state.dataset.state = key;

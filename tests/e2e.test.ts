@@ -203,7 +203,6 @@ test("the options page header follows the configured URL and the last error", as
     await watcher.evaluate((url) => chrome.storage.sync.set({ ntfyUrl: url }), ntfyUrl());
     await page.waitForTimeout(300);
     expect(await state()).toEqual(["unset", "Not configured"]);
-    await watcher.evaluate(() => chrome.storage.sync.remove("ntfyUrl"));
 
     await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), ntfyUrl());
     // Within the background's 2 s settle delay, so the page reacts to the URL itself, not to the check it triggers.
@@ -220,6 +219,7 @@ test("the options page header follows the configured URL and the last error", as
     expect(await state()).toEqual(["watching", "Watching"]);
   } finally {
     await page.close();
+    await watcher.evaluate(() => chrome.storage.sync.remove("ntfyUrl"));
     await watcher.evaluate((s) => chrome.storage.local.set(s), saved);
   }
 });
@@ -330,6 +330,8 @@ test("the options page shows a policy it cannot read", async () => {
     expect(await page.getAttribute("#state", "data-state")).toBe("error");
 
     // A later check that clears lastError does not mean the policy reads again.
+    await watcher.evaluate(() => chrome.storage.local.set({ lastError: "HTTP 500" }));
+    await page.waitForFunction(() => document.querySelector("#error")?.textContent === "HTTP 500");
     await watcher.evaluate(() => chrome.storage.local.set({ lastError: null }));
     await page.waitForFunction(() => document.querySelector("#error")?.textContent === "none");
     expect(await page.getAttribute("#state", "data-state")).toBe("error");
