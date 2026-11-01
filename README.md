@@ -26,6 +26,29 @@ Permissions: `management`, `storage`, `alarms`, and an optional host permission 
 1. Open `chrome://extensions`, turn on Developer mode, and click "Load unpacked". Select the `extension/` directory.
 2. Open the extension's options, enter the ntfy topic URL (for example `https://ntfy.example.com/extension-watch`) and, if the server requires authentication, an access token (sent as `Authorization: Bearer`). Credentials, in the token field or as `?auth=` / `?authorization=` in the URL, need an https URL; only loopback may use http. Save and allow access to that origin.
 
+## Deploy to an organization
+
+An administrator can install the extension on every managed browser and push the ntfy settings, so nobody has to open the options page.
+
+### Install
+
+Force-install it with the `ExtensionInstallForcelist` policy. A force-installed extension cannot be disabled or removed by the user.
+
+On Windows and macOS, Chrome only installs extensions whose update URL points to the Chrome Web Store ("On Windows and macOS, the update_URL must point to the Chrome Web Store", developer.chrome.com, Install extensions). The extension therefore has to be published there (an unlisted listing is enough) before it can be force-installed on those platforms.
+
+### Settings
+
+The extension declares a policy schema (`extension/schema.json`), so the ntfy settings can be pushed as extension policy (managed storage):
+
+| Key | Value |
+|---|---|
+| `ntfyUrl` | The ntfy topic URL. When set, it replaces the URL on the options page, which then shows it read-only |
+| `ntfyToken` | The access token for that URL. It is used only together with `ntfyUrl` from the same policy, never with a token typed on the options page |
+
+On Windows, for example, the values go under `HKEY_LOCAL_MACHINE\Software\Policies\Google\Chrome\3rdparty\extensions\<extension id>\policy`. The same credential rules apply as on the options page (https only, except loopback).
+
+Chrome Enterprise Core can already list extensions, block them, and force-install them. This extension adds what Core does not do on its own: a notification the moment an extension is updated, changes permissions, or is disabled or enabled.
+
 ## Test
 
 ```bash
@@ -48,4 +71,5 @@ bun test
 ## Not verified
 
 - The event order and the reported permissions for a store auto-update, and for an update Chrome disables with `permissions_increase` (the added permissions may only appear once the update is accepted)
-- Behaviour against a real ntfy server and with the host permission granted (the test cannot grant it without a user gesture, so the fake server sends `Access-Control-Allow-Origin: *`)
+- Settings pushed by policy: the tests run without a policy, so reading managed storage, the read-only options page, and policy changes triggering a check have not been run in a browser
+- A policy URL gets no host permission, so sending to it relies on the server's CORS headers. ntfy answers the preflight with `access-control-allow-origin: *` and `access-control-allow-headers: *` (measured against a real server); the tests send a token through a fake server with the same headers and no host permission, which Chromium 156 accepts

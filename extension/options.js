@@ -1,4 +1,4 @@
-import { tokenProblem } from "./rules.js";
+import { readManaged, tokenProblem } from "./rules.js";
 
 const url = document.getElementById("url");
 const token = document.getElementById("token");
@@ -9,6 +9,17 @@ const { ntfyUrl, ntfyToken, lastError } = await chrome.storage.local.get(["ntfyU
 url.value = ntfyUrl ?? "";
 token.value = ntfyToken ?? "";
 error.textContent = lastError ?? "none";
+
+// A URL pushed by policy wins, so the page shows it and does not offer settings that would not apply.
+const managed = await readManaged();
+if (managed.ntfyUrl) {
+  url.value = managed.ntfyUrl;
+  token.value = "";
+  token.placeholder = managed.ntfyToken ? "Set by your administrator" : "";
+  for (const el of [url, token, document.querySelector("#save")]) el.disabled = true;
+  status.textContent = "Set by your administrator through policy";
+}
+
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.lastError) error.textContent = changes.lastError.newValue ?? "none";
 });

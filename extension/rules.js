@@ -17,3 +17,19 @@ export function tokenProblem(url, token) {
   if ((token || inUrl) && u.protocol === "http:" && !LOOPBACK.includes(u.hostname)) return "Credentials need an https URL";
   return "";
 }
+
+// Settings an administrator pushes through policy (managed storage) win over the options page, and
+// the URL and token always come from the same place, so a token never goes to a URL it was not set with.
+export function pickConfig(managed, local) {
+  if (managed?.ntfyUrl) return { ntfyUrl: managed.ntfyUrl, ntfyToken: managed.ntfyToken ?? "", managed: true };
+  return { ntfyUrl: local?.ntfyUrl, ntfyToken: local?.ntfyToken ?? "", managed: false };
+}
+
+// chrome.storage.managed throws when no policy schema applies (unpacked builds without one, tests).
+export async function readManaged() {
+  try {
+    return await chrome.storage.managed.get(["ntfyUrl", "ntfyToken"]);
+  } catch {
+    return {};
+  }
+}

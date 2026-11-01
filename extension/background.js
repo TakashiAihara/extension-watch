@@ -1,5 +1,5 @@
 import { diff, snapshot, split } from "./diff.js";
-import { tokenProblem } from "./rules.js";
+import { pickConfig, readManaged, tokenProblem } from "./rules.js";
 
 // A reload fires onDisabled(old), onEnabled(new) and onInstalled(new) within ~10 ms (measured on
 // Chrome for Testing 156). Waiting lets them read as one update; 2 s is margin, as the order of a
@@ -36,12 +36,14 @@ async function check() {
 }
 
 async function run() {
-  const { extensions: prev, ntfyUrl, ntfyToken, warningsLang } = await chrome.storage.local.get([
+  const local = await chrome.storage.local.get([
     "extensions",
     "ntfyUrl",
     "ntfyToken",
     "warningsLang",
   ]);
+  const { extensions: prev, warningsLang } = local;
+  const { ntfyUrl, ntfyToken } = pickConfig(await readManaged(), local);
   const infos = await chrome.management.getAll();
   const warnings = {};
   // Throws for an extension uninstalled since getAll; keep the old warnings so no change is reported.

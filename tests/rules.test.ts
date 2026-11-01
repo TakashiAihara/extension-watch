@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { tokenProblem } from "../extension/rules.js";
+import { pickConfig, tokenProblem } from "../extension/rules.js";
 
 const T = "tk_sample0";
 
@@ -37,4 +37,24 @@ test("a token together with credentials in the URL is refused; an empty paramete
 test("a repeated parameter with credentials after an empty one still counts", () => {
   expect(tokenProblem("http://ntfy.example.com/t?auth=&auth=abc", "")).toBe("Credentials need an https URL");
   expect(tokenProblem("http://ntfy.example.com/t?authorization=&authorization=abc", "")).toBe("Credentials need an https URL");
+});
+
+test("a policy URL wins and brings its own token, never the options page's", () => {
+  const local = { ntfyUrl: "https://mine.example.com/t", ntfyToken: "tk_local" };
+  expect(pickConfig({ ntfyUrl: "https://org.example.com/t", ntfyToken: "tk_org" }, local)).toEqual({
+    ntfyUrl: "https://org.example.com/t",
+    ntfyToken: "tk_org",
+    managed: true,
+  });
+  expect(pickConfig({ ntfyUrl: "https://org.example.com/t" }, local)).toEqual({
+    ntfyUrl: "https://org.example.com/t",
+    ntfyToken: "",
+    managed: true,
+  });
+});
+
+test("without a policy URL the options page settings are used, even if a policy token exists", () => {
+  const local = { ntfyUrl: "https://mine.example.com/t", ntfyToken: "tk_local" };
+  expect(pickConfig({ ntfyToken: "tk_org" }, local)).toEqual({ ...local, managed: false });
+  expect(pickConfig({}, {})).toEqual({ ntfyUrl: undefined, ntfyToken: "", managed: false });
 });
