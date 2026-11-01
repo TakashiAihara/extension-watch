@@ -208,6 +208,8 @@ test("the options page header follows the configured URL and the last error", as
     // Within the background's 2 s settle delay, so the page reacts to the URL itself, not to the check it triggers.
     await page.waitForFunction(() => document.querySelector("#state")?.getAttribute("data-state") !== "unset", null, { timeout: 1000 });
     expect(await state()).toEqual(["watching", "Watching"]);
+    // Let the check the URL change triggered write its lastError first, so it cannot overwrite the one set below.
+    await waitForAsync(async () => watcher.evaluate(async () => "lastError" in (await chrome.storage.local.get("lastError"))));
 
     await watcher.evaluate(() => chrome.storage.local.set({ lastError: "HTTP 500" }));
     await page.waitForFunction(() => document.querySelector("#state")?.getAttribute("data-state") === "error");
