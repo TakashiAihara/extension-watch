@@ -11,7 +11,7 @@ A Manifest V3 extension that sends a message to an [ntfy](https://ntfy.sh) topic
 - gains or loses permissions, host permissions, or permission warnings
 - changes install type
 - gets disabled, with Chrome's reason (`permissions_increase` when Chrome holds an update until new permissions are accepted)
-- is enabled again, with the reason it had been disabled for (re-enabling after `permissions_increase` is when the new permissions start to apply)
+- is enabled again (`enabled (was permissions_increase)` when Chrome had held it for new permissions, which is when they start to apply)
 
 Permission warnings (`management.getPermissionWarningsById`) are compared because `hostPermissions` does not include content-script matches: an update that adds a content script on all sites shows up only as a new warning.
 

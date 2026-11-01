@@ -194,12 +194,19 @@ test("disabling an extension is sent", async () => {
 }, 30000);
 
 test("re-enabling an extension is sent", async () => {
+  const setTarget = (enabled: boolean) =>
+    watcher.evaluate(async (on) => {
+      const t = (await chrome.management.getAll()).find((e) => e.name === "Target");
+      await chrome.management.setEnabled(t!.id, on);
+    }, enabled);
+
+  // Start from a disabled target regardless of earlier tests, and let that change be sent first.
   received.length = 0;
-  await watcher.evaluate(async () => {
-    const t = (await chrome.management.getAll()).find((e) => e.name === "Target");
-    await chrome.management.setEnabled(t!.id, true);
-  });
+  await setTarget(false);
+  await Bun.sleep(3000);
+  received.length = 0;
+  await setTarget(true);
 
   await waitFor(() => received.length > 0);
-  expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nenabled \(was unknown\)$/);
+  expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nenabled$/);
 }, 30000);

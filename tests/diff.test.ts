@@ -74,7 +74,7 @@ describe("diff", () => {
   test("re-enabling is reported with the reason it had been disabled for", () => {
     const held = snap([info({ enabled: false, disabledReason: "permissions_increase" })]);
     expect(messages(held, snap([info()]))).toEqual(["Sample (abc)\nenabled (was permissions_increase)"]);
-    expect(messages(snap([info({ enabled: false })]), snap([info()]))).toEqual(["Sample (abc)\nenabled"]);
+    expect(messages(snap([info({ enabled: false, disabledReason: "unknown" })]), snap([info()]))).toEqual(["Sample (abc)\nenabled"]);
   });
 
   test("a record written before warnings existed still compares", () => {
