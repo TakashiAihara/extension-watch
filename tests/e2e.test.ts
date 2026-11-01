@@ -182,6 +182,36 @@ test("the options page rejects credentials in the URL and a token a header canno
   await page.close();
 });
 
+test("the options page header follows the configured URL and the last error", async () => {
+  const id = new URL(watcher.url()).host;
+  const saved = await watcher.evaluate(() => chrome.storage.local.get(["ntfyUrl", "lastError"]));
+  await watcher.evaluate(() => chrome.storage.local.remove(["ntfyUrl", "lastError"]));
+  const page = await context.newPage();
+  try {
+    await page.goto(`chrome-extension://${id}/options.html`);
+    const state = async () => [await page.getAttribute("#state", "data-state"), await page.textContent("#state-text")];
+    await page.waitForFunction(() => document.querySelector("#state-text")?.textContent !== "");
+    expect(await state()).toEqual(["unset", "Not configured"]);
+
+    await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), ntfyUrl());
+    // Within the background's 2 s settle delay, so the page reacts to the URL itself, not to the check it triggers.
+    await page.waitForFunction(() => document.querySelector("#state")?.getAttribute("data-state") !== "unset", null, { timeout: 1000 });
+    expect(await state()).toEqual(["watching", "Watching"]);
+
+    await watcher.evaluate(() => chrome.storage.local.set({ lastError: "HTTP 500" }));
+    await page.waitForFunction(() => document.querySelector("#state")?.getAttribute("data-state") === "error");
+    expect(await state()).toEqual(["error", "Error"]);
+    expect(await page.textContent("#error")).toBe("HTTP 500");
+
+    await watcher.evaluate(() => chrome.storage.local.remove("lastError"));
+    await page.waitForFunction(() => document.querySelector("#state")?.getAttribute("data-state") !== "error");
+    expect(await state()).toEqual(["watching", "Watching"]);
+  } finally {
+    await page.close();
+    await watcher.evaluate((s) => chrome.storage.local.set(s), saved);
+  }
+});
+
 // Policy cannot be pushed without writing to the system policy directory, so these tests replace
 // chrome.storage.managed.get inside the extension with what a policy would return.
 test("a policy URL and its token replace the options page settings", async () => {
@@ -224,7 +254,18 @@ test("the options page shows a policy URL read-only and hides the token", async 
   expect(await page.getAttribute("#token", "placeholder")).toBe("Set by your administrator");
   for (const sel of ["#url", "#token", "#save"]) expect(await page.isDisabled(sel)).toBe(true);
   expect(await page.textContent("#status")).toBe("Set by your administrator through policy");
-  await page.close();
+
+  // A policy URL counts as configured even when the options page never saved one.
+  const saved = await watcher.evaluate(async () => (await chrome.storage.local.get("ntfyUrl")).ntfyUrl);
+  await watcher.evaluate(() => chrome.storage.local.remove("ntfyUrl"));
+  try {
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector("#state-text")?.textContent !== "");
+    expect(await page.getAttribute("#state", "data-state")).not.toBe("unset");
+  } finally {
+    await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), saved);
+    await page.close();
+  }
 });
 
 test("a policy that cannot be read stops sending and shows the error instead of using the options page", async () => {

@@ -80,6 +80,9 @@ bun test
 - a stored token is not sent over http to a host other than loopback
 - the options page refuses `user:pass@`, non-http(s) URLs, tokens with spaces, and a token over http (saving itself waits on Chrome's permission prompt, so it is checked by hand)
 - disabling the target is sent, and so is enabling it again
+- the options page header shows "Not configured", "Watching" or "Error" from the saved URL, a policy URL and the last error
+
+The PNG icons in `extension/icons/` are rendered from `icon.svg`. After editing the SVG, run `bun scripts/render-icons.ts`.
 
 `tests/rules.test.ts` covers the URL and token checks the options page and the sender share.
 
