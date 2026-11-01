@@ -193,6 +193,12 @@ test("the options page header follows the configured URL and the last error", as
     await page.waitForFunction(() => document.querySelector("#state-text")?.textContent !== "");
     expect(await state()).toEqual(["unset", "Not configured"]);
 
+    // With no URL every check fails for that reason, so the error does not replace "Not configured".
+    await watcher.evaluate(() => chrome.storage.local.set({ lastError: "ntfy URL is not set" }));
+    await page.waitForFunction(() => document.querySelector("#error")?.textContent === "ntfy URL is not set");
+    expect(await state()).toEqual(["unset", "Not configured"]);
+    await watcher.evaluate(() => chrome.storage.local.remove("lastError"));
+
     await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), ntfyUrl());
     // Within the background's 2 s settle delay, so the page reacts to the URL itself, not to the check it triggers.
     await page.waitForFunction(() => document.querySelector("#state")?.getAttribute("data-state") !== "unset", null, { timeout: 1000 });
@@ -256,14 +262,20 @@ test("the options page shows a policy URL read-only and hides the token", async 
   expect(await page.textContent("#status")).toBe("Set by your administrator through policy");
 
   // A policy URL counts as configured even when the options page never saved one.
-  const saved = await watcher.evaluate(async () => (await chrome.storage.local.get("ntfyUrl")).ntfyUrl);
-  await watcher.evaluate(() => chrome.storage.local.remove("ntfyUrl"));
+  const saved = await watcher.evaluate(() => chrome.storage.local.get(["ntfyUrl", "lastError"]));
+  await watcher.evaluate(() => chrome.storage.local.remove(["ntfyUrl", "lastError"]));
   try {
     await page.reload();
     await page.waitForFunction(() => document.querySelector("#state-text")?.textContent !== "");
-    expect(await page.getAttribute("#state", "data-state")).not.toBe("unset");
+    expect(await page.getAttribute("#state", "data-state")).toBe("watching");
+
+    // Removing the saved URL while a policy URL is in force leaves the page configured.
+    await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), ntfyUrl());
+    await watcher.evaluate(() => chrome.storage.local.remove("ntfyUrl"));
+    await page.waitForTimeout(300);
+    expect(await page.getAttribute("#state", "data-state")).toBe("watching");
   } finally {
-    await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), saved);
+    await watcher.evaluate((s) => chrome.storage.local.set(s), saved);
     await page.close();
   }
 });
@@ -305,6 +317,7 @@ test("the options page shows a policy it cannot read", async () => {
   await page.goto(`chrome-extension://${id}/options.html`);
   await page.waitForFunction(() => document.querySelector("#status")?.textContent !== "");
   expect(await page.textContent("#status")).toBe("Cannot read the policy: policy broken");
+  expect(await page.getAttribute("#state", "data-state")).toBe("error");
   await page.close();
 });
 

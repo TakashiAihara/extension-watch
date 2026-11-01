@@ -15,7 +15,8 @@ const show = (text, kind = "") => {
 
 const STATES = { watching: "Watching", unset: "Not configured", error: "Error" };
 const renderState = (configured, lastError) => {
-  const key = lastError ? "error" : configured ? "watching" : "unset";
+  // Without a URL every check fails with "ntfy URL is not set", which says nothing new.
+  const key = !configured ? "unset" : lastError ? "error" : "watching";
   state.dataset.state = key;
   stateText.textContent = STATES[key];
 };
@@ -26,7 +27,9 @@ token.value = stored.ntfyToken ?? "";
 error.textContent = stored.lastError ?? "none";
 
 // A URL pushed by policy wins, so the page shows it and does not offer settings that would not apply.
+let policyError = false;
 const managed = await readManaged().catch((err) => {
+  policyError = true;
   show(`Cannot read the policy: ${err.message}`, "error");
   return {};
 });
@@ -39,15 +42,19 @@ if (managed.ntfyUrl) {
 }
 let configured = Boolean(managed.ntfyUrl || stored.ntfyUrl);
 let lastError = stored.lastError;
-renderState(configured, lastError);
+// The sender stops while the policy cannot be read, so the header must not say Watching then.
+renderState(configured, lastError || policyError);
 
-chrome.storage.onChanged.addListener((changes) => {
+chrome.storage.onChanged.addListener((changes, area) => {
+  // The page was laid out for the policy read at load, so a policy change needs a fresh read.
+  if (area === "managed") return location.reload();
+  if (area !== "local") return;
   if (changes.lastError) {
     lastError = changes.lastError.newValue;
     error.textContent = lastError ?? "none";
   }
   if (changes.ntfyUrl) configured = Boolean(managed.ntfyUrl || changes.ntfyUrl.newValue);
-  if (changes.lastError || changes.ntfyUrl) renderState(configured, lastError);
+  if (changes.lastError || changes.ntfyUrl) renderState(configured, lastError || policyError);
 });
 
 document.getElementById("save").addEventListener("click", async () => {

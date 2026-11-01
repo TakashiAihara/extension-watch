@@ -14,7 +14,7 @@
         <p>Monitors installed extensions and reports meaningful changes.</p>
       </div>
     </div>
-    <p id="state" class="state" data-state="unset"><span class="state-dot"></span><span id="state-text"></span></p>
+    <p id="state" class="state" data-state="unset" aria-live="polite"><span class="state-dot"></span><span id="state-text"></span></p>
   </header>
 
   <section class="card settings" aria-labelledby="delivery-heading">
@@ -25,11 +25,11 @@
       </div>
       <span class="pill">ntfy</span>
     </div>
-    <p class="card-intro">Send a push message when an extension changes its identity, access, or state.</p>
+    <p class="card-intro">Send a push message when an extension is installed, changes version or access, or is disabled or enabled.</p>
     <div class="field">
       <label for="url">ntfy topic URL</label>
-      <input id="url" type="url" pattern="https?://.+" placeholder="https://ntfy.example.com/topic" />
-      <span class="help">The topic receives one message for each detected change.</span>
+      <input id="url" type="url" pattern="https?://.+" placeholder="https://ntfy.example.com/topic" aria-describedby="url-help" />
+      <span id="url-help" class="help">The topic receives one message for each extension that changed.</span>
     </div>
     <div class="field">
       <label for="token">Access token <span>(optional)</span></label>
@@ -49,6 +49,6 @@
     <span id="error" class="mono"></span>
   </section>
 
-  <p class="note">Extension changes are checked locally. Only event details are sent to your ntfy topic.</p>
+  <p class="note">Extensions are checked inside this browser. Each message carries the extension's name, ID, version and the permissions or host patterns that changed, and goes only to the ntfy topic above.</p>
 </main>
 <script type="module" src="options.js"></script>
