@@ -1,10 +1,18 @@
 <!doctype html>
 <meta charset="utf-8" />
 <title>extension-watch</title>
-<label>
-  ntfy topic URL
-  <input id="url" type="url" size="60" pattern="https?://.+" placeholder="https://ntfy.example.com/topic" />
-</label>
+<p>
+  <label>
+    ntfy topic URL
+    <input id="url" type="url" size="60" pattern="https?://.+" placeholder="https://ntfy.example.com/topic" />
+  </label>
+</p>
+<p>
+  <label>
+    ntfy access token (optional)
+    <input id="token" type="password" size="40" autocomplete="off" placeholder="tk_..." />
+  </label>
+</p>
 <button id="save">Save</button>
 <p id="status"></p>
 <p>Last error: <span id="error"></span></p>
