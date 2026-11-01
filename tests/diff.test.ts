@@ -66,10 +66,20 @@ describe("diff", () => {
     ]);
   });
 
-  test("staying disabled and re-enabling send nothing", () => {
+  test("staying disabled sends nothing", () => {
     const off = snap([info({ enabled: false })]);
     expect(diff(off, off)).toEqual([]);
-    expect(diff(off, snap([info()]))).toEqual([]);
+  });
+
+  test("a record without the enabled field does not read as re-enabled", () => {
+    const { enabled, ...old } = snap([info()]).abc;
+    expect(diff({ abc: old }, snap([info()]))).toEqual([]);
+  });
+
+  test("re-enabling is reported with the reason it had been disabled for", () => {
+    const held = snap([info({ enabled: false, disabledReason: "permissions_increase" })]);
+    expect(messages(held, snap([info()]))).toEqual(["Sample (abc)\nenabled (was permissions_increase)"]);
+    expect(messages(snap([info({ enabled: false, disabledReason: "unknown" })]), snap([info()]))).toEqual(["Sample (abc)\nenabled"]);
   });
 
   test("a record written before warnings existed still compares", () => {

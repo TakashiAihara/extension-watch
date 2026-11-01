@@ -192,3 +192,25 @@ test("disabling an extension is sent", async () => {
   await waitFor(() => received.length > 0);
   expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\ndisabled \(unknown\)$/);
 }, 30000);
+
+test("re-enabling an extension is sent", async () => {
+  const setTarget = (enabled: boolean) =>
+    watcher.evaluate(async (on) => {
+      const t = (await chrome.management.getAll()).find((e) => e.name === "Target");
+      await chrome.management.setEnabled(t!.id, on);
+    }, enabled);
+
+  // Start from a disabled target regardless of earlier tests, and wait until the watcher has stored it.
+  await setTarget(false);
+  await waitForAsync(() =>
+    watcher.evaluate(async () => {
+      const { extensions } = await chrome.storage.local.get("extensions");
+      return Object.values(extensions ?? {}).some((r: any) => r.name === "Target" && r.enabled === false);
+    }),
+  );
+  received.length = 0;
+  await setTarget(true);
+
+  await waitFor(() => received.length > 0);
+  expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nenabled$/);
+}, 30000);
