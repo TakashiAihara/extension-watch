@@ -1,19 +1,24 @@
 import { expect, test } from "bun:test";
 import { tokenProblem } from "../extension/rules.js";
 
-test("no token is always fine", () => {
+const T = "tk_sample0";
+
+test("no credentials are always fine, even over http", () => {
   expect(tokenProblem("http://ntfy.example.com/t", "")).toBe("");
 });
 
 test("an https URL with a plain token is fine, and loopback http is allowed", () => {
-  expect(tokenProblem("https://ntfy.example.com/t", "tk_abc123")).toBe("");
-  expect(tokenProblem("http://127.0.0.1:8080/t", "tk_abc123")).toBe("");
-  expect(tokenProblem("http://localhost/t", "tk_abc123")).toBe("");
-  expect(tokenProblem("http://[::1]/t", "tk_abc123")).toBe("");
+  expect(tokenProblem("https://ntfy.example.com/t", T)).toBe("");
+  expect(tokenProblem("http://127.0.0.1:8080/t", T)).toBe("");
+  expect(tokenProblem("http://localhost/t", T)).toBe("");
+  expect(tokenProblem("http://[::1]/t", T)).toBe("");
 });
 
-test("a token is refused over http to another host", () => {
-  expect(tokenProblem("http://ntfy.example.com/t", "tk_abc123")).toBe("A token needs an https URL");
+test("credentials are refused over http to another host, in the token field or the URL", () => {
+  expect(tokenProblem("http://ntfy.example.com/t", T)).toBe("Credentials need an https URL");
+  expect(tokenProblem("http://ntfy.example.com/t?auth=abc", "")).toBe("Credentials need an https URL");
+  expect(tokenProblem("http://ntfy.example.com/t?authorization=abc", "")).toBe("Credentials need an https URL");
+  expect(tokenProblem("https://ntfy.example.com/t?auth=abc", "")).toBe("");
 });
 
 test("a token with a space, a control character or non-ASCII is refused", () => {
@@ -22,8 +27,9 @@ test("a token with a space, a control character or non-ASCII is refused", () => 
   }
 });
 
-test("a token together with ?auth= is refused", () => {
-  expect(tokenProblem("https://ntfy.example.com/t?auth=abc", "tk_abc123")).toBe(
-    "Use either the token field or ?auth= in the URL, not both",
-  );
+test("a token together with credentials in the URL is refused; an empty parameter is ignored", () => {
+  const both = "Use either the token field or ?auth= in the URL, not both";
+  expect(tokenProblem("https://ntfy.example.com/t?auth=abc", T)).toBe(both);
+  expect(tokenProblem("https://ntfy.example.com/t?authorization=abc", T)).toBe(both);
+  expect(tokenProblem("https://ntfy.example.com/t?auth=", T)).toBe("");
 });

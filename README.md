@@ -23,7 +23,7 @@ Permissions: `management`, `storage`, `alarms`, and an optional host permission 
 ## Install
 
 1. Open `chrome://extensions`, turn on Developer mode, and click "Load unpacked". Select the `extension/` directory.
-2. Open the extension's options, enter the ntfy topic URL (for example `https://ntfy.example.com/extension-watch`) and, if the server requires authentication, an access token (sent as `Authorization: Bearer`, https only). Save and allow access to that origin. Changing the URL to another server clears the token field.
+2. Open the extension's options, enter the ntfy topic URL (for example `https://ntfy.example.com/extension-watch`) and, if the server requires authentication, an access token (sent as `Authorization: Bearer`, https only). Save and allow access to that origin.
 
 ## Test
 
@@ -39,7 +39,7 @@ bun test
 - a rejected send (HTTP 500) is sent again on the next check
 - a change rejected for a missing token (HTTP 403) is sent once a token is saved, as `Authorization: Bearer`
 - a stored token is not sent over http to a host other than loopback
-- the options page shows the saved token, clears it when the server changes, and refuses `user:pass@`, non-http(s) URLs, tokens with spaces, and a token over http
+- the options page refuses `user:pass@`, non-http(s) URLs, tokens with spaces, and a token over http (saving itself waits on Chrome's permission prompt, so it is checked by hand)
 - disabling the target is sent
 
 `tests/rules.test.ts` covers the URL and token checks the options page and the sender share.

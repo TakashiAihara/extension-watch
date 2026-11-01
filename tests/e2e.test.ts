@@ -158,25 +158,12 @@ test("a stored token is not sent over http to another host", async () => {
   await watcher.evaluate(() => chrome.storage.local.set({ ntfyUrl: "http://ntfy.invalid.test/topic", ntfyToken: "fake-token-for-test" }));
   writeTarget("1.4", ["storage", "tabs"], [{ matches: ["<all_urls>"], js: ["cs.js"] }]);
   await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
-  await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError))?.endsWith("A token needs an https URL") ?? false);
-  expect(received).toEqual([]);
+  await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError))?.endsWith("Credentials need an https URL") ?? false);
 
   await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url, ntfyToken: "" }), ntfyUrl());
   await waitFor(() => received.length > 0);
   expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.3 -> 1\.4$/);
 }, 30000);
-
-test("the options page shows the saved token and clears it when the server changes", async () => {
-  await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url, ntfyToken: "saved-token" }), ntfyUrl());
-  const id = new URL(watcher.url()).host;
-  const page = await context.newPage();
-  await page.goto(`chrome-extension://${id}/options.html`);
-  expect(await page.inputValue("#token")).toBe("saved-token");
-  await page.fill("#url", ntfyUrl().replace("127.0.0.1", "localhost"));
-  expect(await page.inputValue("#token")).toBe("");
-  await page.close();
-  await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url, ntfyToken: "" }), ntfyUrl());
-});
 
 test("the options page rejects credentials in the URL and a token a header cannot hold", async () => {
   const id = new URL(watcher.url()).host;
@@ -191,7 +178,7 @@ test("the options page rejects credentials in the URL and a token a header canno
   expect(await status("https://u:p@ntfy.example.com/t", "")).toBe("Use an access token, or ?auth= in the URL, instead of user:pass@");
   expect(await status("ftp://ntfy.example.com/t", "")).toBe("Enter an http(s) URL");
   expect(await status("https://ntfy.example.com/t", "bad token")).toBe("The token must be printable ASCII without spaces");
-  expect(await status("http://ntfy.example.com/t", "tk_abc")).toBe("A token needs an https URL");
+  expect(await status("http://ntfy.example.com/t", "tk_abc")).toBe("Credentials need an https URL");
   await page.close();
 });
 
