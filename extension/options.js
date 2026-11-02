@@ -96,7 +96,7 @@ function renderHistory(entries = []) {
       lines.append(item);
     }
     what.append(lines);
-    const note = { pending: "Not sent yet", replaced: "Changed again before it was sent" }[e.state];
+    const note = { pending: "Not sent yet", replaced: "Not sent: it changed again before the retry" }[e.state];
     if (note) {
       const mark = document.createElement("span");
       mark.className = "unsent";

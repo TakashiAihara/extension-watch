@@ -100,6 +100,7 @@ async function run() {
   // Saved together, so a worker stopped in between cannot replay the language change.
   await chrome.storage.local.set({ extensions: saved, warningsLang: lang });
   // Saved after the records, so a history write that fails (quota) cannot make the sent changes repeat.
+  // The cost is on the history side: its pending entries then read as replaced on the next check.
   await chrome.storage.local.set({ history: record(local.history, changes, sentIds, at) });
   if (error) throw error;
 }

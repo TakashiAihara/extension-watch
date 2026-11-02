@@ -169,8 +169,8 @@ test("the History tab lists recorded changes newest first", async () => {
     const rows = await page.$$eval("#history-list > li", (lis) => lis.map((li) => li.innerText));
     expect(rows).toHaveLength(2);
     expect(rows[0]).toContain("version 1.1 -> 1.2");
-    expect(rows[0]).not.toContain("before it was sent");
-    expect(rows[1]).toContain("Changed again before it was sent");
+    expect(rows[0]).not.toContain("Not sent");
+    expect(rows[1]).toContain("Not sent: it changed again before the retry");
     expect(rows[0]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n/);
 
     // A new entry written while the page is open shows up without a reload, and a pending one is marked.
@@ -495,11 +495,12 @@ test("a held change that goes away before it is sent is closed in the history", 
     expect(await newest()).toMatchObject({ lines: ["disabled (unknown)"], state: "pending" });
 
     // Turned back on before any send got through: nothing to send, and the held entry is closed.
-    received.length = 0;
+    const before = rejected;
     await setTarget(true);
     await waitForAsync(async () => (await newest())?.state !== "pending");
     expect(await newest()).toMatchObject({ lines: ["disabled (unknown)"], state: "replaced" });
-    expect(received).toEqual([]);
+    // failing is still on, so a send would show up as a rejection.
+    expect(rejected).toBe(before);
   } finally {
     failing = false;
   }

@@ -59,7 +59,7 @@ describe("record", () => {
     ]);
   });
 
-  test("other extensions' pending entries are not touched by a change of one", () => {
+  test("a pending change whose send fails again stays pending next to one that is sent", () => {
     let h = record([], [change("a", ["enabled"]), change("b", ["enabled"])], none, 100);
     h = record(h, [change("a", ["enabled"]), change("b", ["enabled"])], new Set(["a"]), 200);
     expect(h.map((e) => [e.id, e.state])).toEqual([

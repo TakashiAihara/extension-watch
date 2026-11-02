@@ -3,8 +3,9 @@
 export const MAX_ENTRIES = 500;
 
 // Entry states: "sent", "pending" (the send failed and the change is held for the next check), or
-// "replaced" (the extension changed again before the held change was sent, so that exact change was
-// never sent; what replaced it has its own entry, or nothing if it went back to the last sent state).
+// "replaced" (the next check did not find the same change, so that exact change is never sent: the
+// extension changed again, went back, was removed, or only its localized warnings moved with a UI
+// language change; a different change has its own entry).
 //
 // Each check passes every change it found. A pending entry is the retry of a change only when the
 // same extension shows the same lines again; otherwise it is replaced. A held change and a new event
