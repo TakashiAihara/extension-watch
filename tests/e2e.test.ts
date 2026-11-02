@@ -119,6 +119,11 @@ test("a version bump with a new permission and content scripts is sent once to n
   expect(received[0].body).toMatch(
     /^Target \([a-p]{32}\)\nversion 1\.0 -> 1\.1\npermissions added: tabs\nwarnings added: .*all your data on all websites.*$/,
   );
+
+  const history = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history);
+  expect(history).toHaveLength(1);
+  expect(history[0]).toMatchObject({ name: "Target", sent: true });
+  expect(history[0].lines.slice(0, 2)).toEqual(["version 1.0 -> 1.1", "permissions added: tabs"]);
 }, 30000);
 
 test("a rejected send is retried with the same change", async () => {
@@ -128,12 +133,53 @@ test("a rejected send is retried with the same change", async () => {
   await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
   await waitFor(() => rejected > 0);
   await waitForAsync(async () => !!(await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError)));
+  const held = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history);
+  expect(held[0]).toMatchObject({ lines: ["version 1.1 -> 1.2"], sent: false });
 
   failing = false;
   await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), `${ntfyUrl()}?retry=1`);
   await waitFor(() => received.length > 0);
   expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.1 -> 1\.2$/);
   await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError)) === null);
+
+  // The retry marks the held entry as sent instead of adding a second one.
+  const after = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history);
+  expect(after.length).toBe(held.length);
+  expect(after[0]).toMatchObject({ at: held[0].at, lines: ["version 1.1 -> 1.2"], sent: true });
+}, 30000);
+
+test("the History tab lists recorded changes newest first", async () => {
+  const id = new URL(watcher.url()).host;
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${id}/options.html`);
+  await page.waitForFunction(() => document.querySelector("#state-text")?.textContent !== "");
+  expect(await page.isHidden("#panel-history")).toBe(true);
+
+  await page.click("#tab-history");
+  expect(await page.isVisible("#panel-history")).toBe(true);
+  expect(await page.isHidden("#panel-settings")).toBe(true);
+  expect(await page.textContent("#history-count")).toBe("2");
+  const rows = await page.$$eval("#history-list > li", (lis) => lis.map((li) => li.innerText));
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toContain("version 1.1 -> 1.2");
+  expect(rows[1]).toContain("version 1.0 -> 1.1");
+  expect(rows[0]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n/);
+
+  // A new entry written while the page is open shows up without a reload, and an unsent one is marked.
+  await watcher.evaluate(async () => {
+    const { history } = await chrome.storage.local.get("history");
+    await chrome.storage.local.set({ history: [{ at: Date.now(), id: "x".repeat(32), name: "Late", lines: ["enabled"], sent: false }, ...history] });
+  });
+  await page.waitForFunction(() => document.querySelector("#history-count")?.textContent === "3");
+  expect(await page.textContent("#history-list > li:first-child")).toContain("Not sent yet");
+
+  await page.keyboard.press("ArrowLeft");
+  expect(await page.isVisible("#panel-settings")).toBe(true);
+  await watcher.evaluate(async () => {
+    const { history } = await chrome.storage.local.get("history");
+    await chrome.storage.local.set({ history: history.slice(1) });
+  });
+  await page.close();
 }, 30000);
 
 test("a change rejected for a missing token is sent once a token is saved", async () => {

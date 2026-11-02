@@ -17,6 +17,12 @@
     <p id="state" class="state" data-state="unset" aria-live="polite"><span class="state-dot"></span><span id="state-text"></span></p>
   </header>
 
+  <div class="tabs" role="tablist" aria-label="Sections">
+    <button id="tab-settings" class="tab" role="tab" aria-selected="true" aria-controls="panel-settings">Settings</button>
+    <button id="tab-history" class="tab" role="tab" aria-selected="false" aria-controls="panel-history" tabindex="-1">History <span id="history-count" class="count">0</span></button>
+  </div>
+
+  <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings">
   <section class="card settings" aria-labelledby="delivery-heading">
     <div class="card-heading">
       <div>
@@ -50,5 +56,20 @@
   </section>
 
   <p class="note">Extensions are checked inside this browser. Messages name the extension, its ID and what changed, and go only to the ntfy topic above.</p>
+  </div>
+
+  <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+    <section class="card history" aria-labelledby="history-heading">
+      <div class="card-heading history-heading">
+        <div>
+          <p class="eyebrow">Audit trail</p>
+          <h2 id="history-heading">Recent changes</h2>
+        </div>
+        <span class="help">Newest first, kept in this browser</span>
+      </div>
+      <p id="history-empty" class="history-empty">No changes recorded yet.</p>
+      <ol id="history-list" class="history-list"></ol>
+    </section>
+  </div>
 </main>
 <script type="module" src="options.js"></script>

@@ -27,7 +27,7 @@ const LISTS = [
   ["warnings", "warnings"],
 ];
 
-// Returns one { id, message } per changed extension. Uninstalls only drop the record.
+// Returns one { id, name, lines, message } per changed extension. Uninstalls only drop the record.
 export function diff(prev, next) {
   const changes = [];
   for (const [id, n] of Object.entries(next)) {
@@ -53,7 +53,7 @@ export function diff(prev, next) {
     if (p && p.enabled === false && n.enabled) {
       lines.push(p.disabledReason === "permissions_increase" ? "enabled (was permissions_increase)" : "enabled");
     }
-    if (lines.length) changes.push({ id, message: `${n.name} (${id})\n${lines.join("\n")}` });
+    if (lines.length) changes.push({ id, name: n.name, lines, message: `${n.name} (${id})\n${lines.join("\n")}` });
   }
   return changes;
 }
