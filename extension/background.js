@@ -1,4 +1,5 @@
 import { diff, snapshot, split } from "./diff.js";
+import { hasPending, record } from "./history.js";
 import { authParam, pickConfig, readManaged, tokenProblem } from "./rules.js";
 
 // A reload fires onDisabled(old), onEnabled(new) and onInstalled(new) within ~10 ms (measured on
@@ -41,6 +42,7 @@ async function run() {
     "ntfyUrl",
     "ntfyToken",
     "warningsLang",
+    "history",
   ]);
   const { extensions: prev, warningsLang } = local;
   const infos = await chrome.management.getAll();
@@ -65,14 +67,30 @@ async function run() {
   // One message per extension, so one failing send does not hold back the others. A failed
   // extension keeps its old record, so the same change is sent on the next check.
   const saved = { ...next };
+  const sentIds = new Set();
   let error;
   const changes = diff(prev, next);
+  const at = Date.now();
+  if (!changes.length) {
+    await chrome.storage.local.set({ extensions: saved, warningsLang: lang });
+    // A held change that is gone (the extension went back) closes its pending entry.
+    if (hasPending(local.history)) await chrome.storage.local.set({ history: record(local.history, [], sentIds, at) });
+    return;
+  }
+
   // Read where to send only when there is something to send, so a policy that cannot be read holds
-  // the changes (the throw keeps the old records) without blocking the baseline above.
-  const { ntfyUrl, ntfyToken, managed } = changes.length ? pickConfig(await readManaged(), local) : {};
+  // the changes (they keep their old records) without blocking the baseline above.
+  let config;
+  try {
+    config = pickConfig(await readManaged(), local);
+  } catch (err) {
+    error = err;
+  }
   for (const { id, message } of changes) {
     try {
-      await send(ntfyUrl, ntfyToken, message, managed);
+      // Without a config (the policy read failed) send throws for the missing URL; error keeps the policy failure.
+      await send(config?.ntfyUrl, config?.ntfyToken, message, config?.managed);
+      sentIds.add(id);
     } catch (err) {
       error ??= err;
       if (prev[id]) saved[id] = prev[id];
@@ -81,6 +99,9 @@ async function run() {
   }
   // Saved together, so a worker stopped in between cannot replay the language change.
   await chrome.storage.local.set({ extensions: saved, warningsLang: lang });
+  // Saved after the records, so a history write that fails (quota) cannot make the sent changes repeat.
+  // The cost is on the history side: its pending entries then read as replaced on the next check.
+  await chrome.storage.local.set({ history: record(local.history, changes, sentIds, at) });
   if (error) throw error;
 }
 

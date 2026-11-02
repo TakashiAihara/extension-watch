@@ -119,6 +119,11 @@ test("a version bump with a new permission and content scripts is sent once to n
   expect(received[0].body).toMatch(
     /^Target \([a-p]{32}\)\nversion 1\.0 -> 1\.1\npermissions added: tabs\nwarnings added: .*all your data on all websites.*$/,
   );
+
+  const history = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history);
+  expect(history).toHaveLength(1);
+  expect(history[0]).toMatchObject({ name: "Target", state: "sent" });
+  expect(history[0].lines.slice(0, 2)).toEqual(["version 1.0 -> 1.1", "permissions added: tabs"]);
 }, 30000);
 
 test("a rejected send is retried with the same change", async () => {
@@ -128,12 +133,63 @@ test("a rejected send is retried with the same change", async () => {
   await (await findWorker("Target")).evaluate(() => chrome.runtime.reload()).catch(() => {});
   await waitFor(() => rejected > 0);
   await waitForAsync(async () => !!(await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError)));
+  const held = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history);
+  expect(held[0]).toMatchObject({ lines: ["version 1.1 -> 1.2"], state: "pending" });
 
   failing = false;
   await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: url }), `${ntfyUrl()}?retry=1`);
   await waitFor(() => received.length > 0);
   expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.1 -> 1\.2$/);
   await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError)) === null);
+
+  // The retry marks the held entry as sent instead of adding a second one.
+  const after = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history);
+  expect(after.length).toBe(held.length);
+  expect(after[0]).toMatchObject({ at: held[0].at, lines: ["version 1.1 -> 1.2"], state: "sent" });
+}, 30000);
+
+test("the History tab lists recorded changes newest first", async () => {
+  const id = new URL(watcher.url()).host;
+  const page = await context.newPage();
+  const saved = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history);
+  const entry = (at: number, name: string, lines: string[], state: string) => ({ at, id: "p".repeat(32), name, lines, state });
+  await watcher.evaluate(
+    (h) => chrome.storage.local.set({ history: h }),
+    [entry(2000, "Second", ["version 1.1 -> 1.2"], "sent"), entry(1000, "First", ["version 1.0 -> 1.1"], "replaced")],
+  );
+  try {
+    await page.goto(`chrome-extension://${id}/options.html`);
+    await page.waitForFunction(() => document.querySelector("#state-text")?.textContent !== "");
+    expect(await page.isHidden("#panel-history")).toBe(true);
+
+    await page.click("#tab-history");
+    expect(await page.isVisible("#panel-history")).toBe(true);
+    expect(await page.isHidden("#panel-settings")).toBe(true);
+    expect(await page.textContent("#history-count")).toBe("2");
+    const rows = await page.$$eval("#history-list > li", (lis) => lis.map((li) => li.innerText));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain("version 1.1 -> 1.2");
+    expect(rows[0]).not.toContain("Not sent");
+    expect(rows[1]).toContain("Not sent: it changed again before the retry");
+    expect(rows[0]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n/);
+
+    // A new entry written while the page is open shows up without a reload, and a pending one is marked.
+    await watcher.evaluate((e) => chrome.storage.local.get("history").then(({ history }) => chrome.storage.local.set({ history: [e, ...history] })), entry(3000, "Late", ["enabled"], "pending"));
+    await page.waitForFunction(() => document.querySelector("#history-count")?.textContent === "3");
+    expect(await page.textContent("#history-list > li:first-child")).toContain("Not sent yet");
+
+    // Arrow keys move the selection and the focus, and only the selected tab stays in the tab order.
+    await page.keyboard.press("ArrowLeft");
+    expect(await page.isVisible("#panel-settings")).toBe(true);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("tab-settings");
+    expect(await page.getAttribute("#tab-history", "tabindex")).toBe("-1");
+    await page.keyboard.press("ArrowLeft");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("tab-history");
+    expect(await page.getAttribute("#tab-settings", "tabindex")).toBe("-1");
+  } finally {
+    await watcher.evaluate((h) => chrome.storage.local.set({ history: h }), saved);
+    await page.close();
+  }
 }, 30000);
 
 test("a change rejected for a missing token is sent once a token is saved", async () => {
@@ -302,6 +358,8 @@ test("a policy that cannot be read stops sending and shows the error instead of 
     await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("lastError")).lastError))?.endsWith("policy broken") ?? false);
     expect(await watcher.evaluate(() => chrome.action.getBadgeText({}))).toBe("!");
     expect(received).toEqual([]);
+    const held = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history[0]);
+    expect(held).toMatchObject({ lines: ["version 1.5 -> 1.6"], state: "pending" });
   } finally {
     await watcher.evaluate(() => {
       (chrome.storage.managed as any).get = (globalThis as any).__managedGet;
@@ -312,6 +370,10 @@ test("a policy that cannot be read stops sending and shows the error instead of 
   await watcher.evaluate((url) => chrome.storage.local.set({ ntfyUrl: `${url}?again=1` }), ntfyUrl());
   await waitFor(() => received.length > 0);
   expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nversion 1\.5 -> 1\.6$/);
+  await waitForAsync(async () => (await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history[0].state)) === "sent");
+  const after = await watcher.evaluate(async () => (await chrome.storage.local.get("history")).history);
+  expect(after[0]).toMatchObject({ lines: ["version 1.5 -> 1.6"], state: "sent" });
+  expect(after.filter((e: { lines: string[] }) => e.lines[0] === "version 1.5 -> 1.6")).toHaveLength(1);
 }, 30000);
 
 test("the options page shows a policy it cannot read", async () => {
@@ -414,4 +476,32 @@ test("re-enabling an extension is sent", async () => {
 
   await waitFor(() => received.length > 0);
   expect(received[0].body).toMatch(/^Target \([a-p]{32}\)\nenabled$/);
+}, 30000);
+
+test("a held change that goes away before it is sent is closed in the history", async () => {
+  const setTarget = (enabled: boolean) =>
+    watcher.evaluate(async (on) => {
+      const t = (await chrome.management.getAll()).find((e) => e.name === "Target");
+      await chrome.management.setEnabled(t!.id, on);
+    }, enabled);
+  const newest = () => watcher.evaluate(async () => (await chrome.storage.local.get("history")).history[0]);
+
+  rejected = 0;
+  failing = true;
+  try {
+    await setTarget(false);
+    await waitFor(() => rejected > 0);
+    await waitForAsync(async () => (await newest())?.state === "pending");
+    expect(await newest()).toMatchObject({ lines: ["disabled (unknown)"], state: "pending" });
+
+    // Turned back on before any send got through: nothing to send, and the held entry is closed.
+    const before = rejected;
+    await setTarget(true);
+    await waitForAsync(async () => (await newest())?.state !== "pending");
+    expect(await newest()).toMatchObject({ lines: ["disabled (unknown)"], state: "replaced" });
+    // failing is still on, so a send would show up as a rejection.
+    expect(rejected).toBe(before);
+  } finally {
+    failing = false;
+  }
 }, 30000);

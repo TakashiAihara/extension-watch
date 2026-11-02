@@ -26,21 +26,16 @@ describe("diff", () => {
     const next = snap([info({ version: "1.1", permissions: ["tabs"], hostPermissions: ["https://b.example/*"] })], {
       abc: ["Read and change all your data on all websites"],
     });
-    expect(diff(prev, next)).toEqual([
-      {
-        id: "abc",
-        message: [
-          "Sample (abc)",
-          "version 1.0 -> 1.1",
-          "permissions added: tabs",
-          "permissions removed: storage",
-          "hosts added: https://b.example/*",
-          "hosts removed: https://a.example/*",
-          "warnings added: Read and change all your data on all websites",
-          "warnings removed: Old warning",
-        ].join("\n"),
-      },
-    ]);
+    const lines = [
+      "version 1.0 -> 1.1",
+      "permissions added: tabs",
+      "permissions removed: storage",
+      "hosts added: https://b.example/*",
+      "hosts removed: https://a.example/*",
+      "warnings added: Read and change all your data on all websites",
+      "warnings removed: Old warning",
+    ];
+    expect(diff(prev, next)).toEqual([{ id: "abc", name: "Sample", lines, message: ["Sample (abc)", ...lines].join("\n") }]);
   });
 
   test("new extension lists its permissions, hosts and warnings", () => {
