@@ -1,5 +1,5 @@
 import { diff, snapshot, split } from "./diff.js";
-import { record } from "./history.js";
+import { hasPending, record } from "./history.js";
 import { authParam, pickConfig, readManaged, tokenProblem } from "./rules.js";
 
 // A reload fires onDisabled(old), onEnabled(new) and onInstalled(new) within ~10 ms (measured on
@@ -70,7 +70,13 @@ async function run() {
   const sentIds = new Set();
   let error;
   const changes = diff(prev, next);
-  if (!changes.length) return chrome.storage.local.set({ extensions: saved, warningsLang: lang });
+  const at = Date.now();
+  if (!changes.length) {
+    await chrome.storage.local.set({ extensions: saved, warningsLang: lang });
+    // A held change that is gone (the extension went back) closes its pending entry.
+    if (hasPending(local.history)) await chrome.storage.local.set({ history: record(local.history, [], sentIds, at) });
+    return;
+  }
 
   // Read where to send only when there is something to send, so a policy that cannot be read holds
   // the changes (they keep their old records) without blocking the baseline above.
@@ -91,10 +97,10 @@ async function run() {
       else delete saved[id];
     }
   }
-  // Saved together, so a worker stopped in between cannot replay the language change, and the
-  // history matches the records: a held change is retried and updates its own entry.
-  const history = record(local.history, changes, sentIds, Date.now());
-  await chrome.storage.local.set({ extensions: saved, warningsLang: lang, history });
+  // Saved together, so a worker stopped in between cannot replay the language change.
+  await chrome.storage.local.set({ extensions: saved, warningsLang: lang });
+  // Saved after the records, so a history write that fails (quota) cannot make the sent changes repeat.
+  await chrome.storage.local.set({ history: record(local.history, changes, sentIds, at) });
   if (error) throw error;
 }
 

@@ -1,32 +1,45 @@
 import { describe, expect, test } from "bun:test";
-import { formatTime, record } from "../extension/history.js";
+import { formatTime, hasPending, record } from "../extension/history.js";
 
 const change = (id: string, lines: string[]) => ({ id, name: `Ext ${id}`, lines, message: "" });
+const none = new Set<string>();
 
 describe("record", () => {
-  test("adds sent and unsent changes newest first", () => {
+  test("adds sent and pending changes newest first", () => {
     const h = record([], [change("a", ["enabled"]), change("b", ["version 1 -> 2"])], new Set(["a"]), 100);
     expect(h).toEqual([
-      { at: 100, id: "b", name: "Ext b", lines: ["version 1 -> 2"], sent: false },
-      { at: 100, id: "a", name: "Ext a", lines: ["enabled"], sent: true },
+      { at: 100, id: "b", name: "Ext b", lines: ["version 1 -> 2"], state: "pending" },
+      { at: 100, id: "a", name: "Ext a", lines: ["enabled"], state: "sent" },
     ]);
   });
 
   test("a held change that is sent later updates its entry and keeps the first time", () => {
-    const held = record([], [change("a", ["version 1 -> 2"])], new Set(), 100);
-    const again = record(held, [change("a", ["version 1 -> 2"])], new Set(), 200);
+    const held = record([], [change("a", ["version 1 -> 2"])], none, 100);
+    const again = record(held, [change("a", ["version 1 -> 2"])], none, 200);
     expect(again).toEqual(held);
     expect(record(again, [change("a", ["version 1 -> 2"])], new Set(["a"]), 300)).toEqual([
-      { at: 100, id: "a", name: "Ext a", lines: ["version 1 -> 2"], sent: true },
+      { at: 100, id: "a", name: "Ext a", lines: ["version 1 -> 2"], state: "sent" },
     ]);
   });
 
-  test("a held change that grew before it was sent gets a new entry", () => {
-    const held = record([], [change("a", ["version 1 -> 2"])], new Set(), 100);
+  test("a held change that grew is replaced by a new entry", () => {
+    const held = record([], [change("a", ["version 1 -> 2"])], none, 100);
     const grown = record(held, [change("a", ["version 1 -> 3"])], new Set(["a"]), 200);
-    expect(grown.map((e) => [e.at, e.lines[0], e.sent])).toEqual([
-      [200, "version 1 -> 3", true],
-      [100, "version 1 -> 2", false],
+    expect(grown.map((e) => [e.at, e.lines[0], e.state])).toEqual([
+      [200, "version 1 -> 3", "sent"],
+      [100, "version 1 -> 2", "replaced"],
+    ]);
+  });
+
+  test("a held change that went away is closed, and a later identical event gets its own entry", () => {
+    // Disabled while the send fails, enabled again, then disabled for real days later.
+    let h = record([], [change("a", ["disabled (unknown)"])], none, 100);
+    h = record(h, [], none, 200);
+    expect(h.map((e) => e.state)).toEqual(["replaced"]);
+    h = record(h, [change("a", ["disabled (unknown)"])], new Set(["a"]), 900);
+    expect(h.map((e) => [e.at, e.state])).toEqual([
+      [900, "sent"],
+      [100, "replaced"],
     ]);
   });
 
@@ -35,13 +48,23 @@ describe("record", () => {
     expect(record(sent, [change("a", ["disabled (unknown)"])], new Set(["a"]), 200)).toHaveLength(2);
   });
 
-  test("only the newest entry of an extension is updated", () => {
-    let h = record([], [change("a", ["enabled"])], new Set(), 100);
-    h = record(h, [change("b", ["enabled"])], new Set(["b"]), 150);
-    h = record(h, [change("a", ["enabled"])], new Set(["a"]), 200);
-    expect(h.map((e) => [e.id, e.at, e.sent])).toEqual([
-      ["b", 150, true],
-      ["a", 100, true],
+  test("only a pending entry is matched, not an older sent one with the same lines", () => {
+    let h = record([], [change("a", ["enabled"])], new Set(["a"]), 100);
+    h = record(h, [change("b", ["enabled"])], none, 150);
+    h = record(h, [change("a", ["enabled"]), change("b", ["enabled"])], new Set(["a", "b"]), 200);
+    expect(h.map((e) => [e.id, e.at, e.state])).toEqual([
+      ["a", 200, "sent"],
+      ["b", 150, "sent"],
+      ["a", 100, "sent"],
+    ]);
+  });
+
+  test("other extensions' pending entries are not touched by a change of one", () => {
+    let h = record([], [change("a", ["enabled"]), change("b", ["enabled"])], none, 100);
+    h = record(h, [change("a", ["enabled"]), change("b", ["enabled"])], new Set(["a"]), 200);
+    expect(h.map((e) => [e.id, e.state])).toEqual([
+      ["b", "pending"],
+      ["a", "sent"],
     ]);
   });
 
@@ -54,7 +77,20 @@ describe("record", () => {
   });
 });
 
+test("hasPending is true only while an entry waits to be sent", () => {
+  expect(hasPending(undefined)).toBe(false);
+  expect(hasPending(record([], [change("a", ["enabled"])], new Set(["a"]), 1))).toBe(false);
+  expect(hasPending(record([], [change("a", ["enabled"])], none, 1))).toBe(true);
+});
+
 test("formatTime writes local time as YYYY-MM-DD HH:mm", () => {
-  expect(formatTime(new Date(2026, 0, 5, 3, 7, 59).getTime())).toBe("2026-01-05 03:07");
-  expect(formatTime(new Date(2026, 10, 22, 14, 30).getTime())).toBe("2026-11-22 14:30");
+  const tz = process.env.TZ;
+  // A zone away from UTC, so UTC getters would give another hour and day.
+  process.env.TZ = "Asia/Tokyo";
+  try {
+    expect(formatTime(Date.UTC(2026, 0, 4, 18, 7, 59))).toBe("2026-01-05 03:07");
+    expect(formatTime(Date.UTC(2026, 10, 22, 5, 30))).toBe("2026-11-22 14:30");
+  } finally {
+    process.env.TZ = tz;
+  }
 });

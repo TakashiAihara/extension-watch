@@ -96,11 +96,12 @@ function renderHistory(entries = []) {
       lines.append(item);
     }
     what.append(lines);
-    if (!e.sent) {
-      const unsent = document.createElement("span");
-      unsent.className = "unsent";
-      unsent.textContent = "Not sent yet";
-      what.append(unsent);
+    const note = { pending: "Not sent yet", replaced: "Changed again before it was sent" }[e.state];
+    if (note) {
+      const mark = document.createElement("span");
+      mark.className = "unsent";
+      mark.textContent = note;
+      what.append(mark);
     }
     li.append(time, who, what);
     return li;
