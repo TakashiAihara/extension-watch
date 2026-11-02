@@ -114,4 +114,12 @@ describe("trimming", () => {
     expect(bytes).toBeGreaterThan(900_000);
     expect(h[0].at).toBe(59);
   });
+
+  test("counts bytes, not characters, for localized warnings", () => {
+    const warnings = Array.from({ length: 2000 }, (_, i) => `すべてのウェブサイト上にある全データの読み取りと変更 ${i}`);
+    let h: ReturnType<typeof record> = [];
+    for (let i = 0; i < 20; i++) h = record(h, [change(`e${i}`, warnings)], new Set([`e${i}`]), i);
+    expect(new TextEncoder().encode(JSON.stringify(h)).length).toBeLessThanOrEqual(1_000_000);
+    expect(JSON.stringify(h).length).toBeLessThan(500_000);
+  });
 });
