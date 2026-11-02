@@ -94,3 +94,24 @@ test("formatTime writes local time as YYYY-MM-DD HH:mm", () => {
     process.env.TZ = tz;
   }
 });
+
+describe("trimming", () => {
+  test("drops the oldest sent entries but keeps a pending one past the count cap", () => {
+    let h = record([], [change("held", ["version 1 -> 2"])], none, 0);
+    for (let i = 1; i <= 505; i++) h = record(h, [change(`e${i}`, ["enabled"]), change("held", ["version 1 -> 2"])], new Set([`e${i}`]), i);
+    expect(h).toHaveLength(500);
+    expect(h[h.length - 1]).toMatchObject({ id: "held", at: 0, state: "pending" });
+    expect(h[0].at).toBe(505);
+    expect(h[h.length - 2].at).toBe(7);
+  });
+
+  test("keeps the stored history under the byte cap", () => {
+    const big = Array.from({ length: 2000 }, (_, i) => `https://host-${i}.example.com/*`);
+    let h: ReturnType<typeof record> = [];
+    for (let i = 0; i < 60; i++) h = record(h, [change(`e${i}`, big)], new Set([`e${i}`]), i);
+    const bytes = new TextEncoder().encode(JSON.stringify(h)).length;
+    expect(bytes).toBeLessThanOrEqual(1_000_000);
+    expect(bytes).toBeGreaterThan(900_000);
+    expect(h[0].at).toBe(59);
+  });
+});

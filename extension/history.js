@@ -1,6 +1,7 @@
-// The cap counts entries, not bytes: an entry is a few hundred bytes, so 500 stay far below the
-// 10 MB storage.local quota (no unlimitedStorage).
+// Both caps hold: an install entry lists every permission, host and warning, so a few large
+// extensions could otherwise fill the 10 MB storage.local quota (no unlimitedStorage) with history.
 export const MAX_ENTRIES = 500;
+export const MAX_BYTES = 1_000_000;
 
 // Entry states: "sent", "pending" (the send failed and the change is held for the next check), or
 // "replaced" (the next check did not find the same change, so that exact change is never sent: the
@@ -24,7 +25,20 @@ export function record(history = [], changes, sentIds, at) {
     if (retried.has(id)) continue;
     out.unshift({ at, id, name, lines, state: sentIds.has(id) ? "sent" : "pending" });
   }
-  return out.slice(0, MAX_ENTRIES);
+  return trim(out);
+}
+
+// Drops the oldest entries first, but never a pending one: it still has to be resolved by a retry.
+// There is at most one pending entry per extension, so they cannot grow without bound.
+function trim(entries) {
+  const out = [...entries];
+  let bytes = new TextEncoder().encode(JSON.stringify(out)).length;
+  for (let i = out.length - 1; i >= 0 && (out.length > MAX_ENTRIES || bytes > MAX_BYTES); i--) {
+    if (out[i].state === "pending") continue;
+    bytes -= new TextEncoder().encode(JSON.stringify(out[i])).length + 1;
+    out.splice(i, 1);
+  }
+  return out;
 }
 
 export const hasPending = (history = []) => history.some((e) => e.state === "pending");

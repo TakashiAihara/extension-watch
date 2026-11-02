@@ -19,7 +19,7 @@ It compares `chrome.management.getAll()` against the last snapshot in `chrome.st
 
 Each changed extension is sent as its own message. If a send fails (no URL, network error, non-2xx), that extension keeps its old record so the same change is sent on the next check, the badge shows `!`, and the error is shown on the options page.
 
-Every change is also kept in `chrome.storage.local` (the newest 500) and listed on the options page's History tab, with local time as `YYYY-MM-DD HH:mm`. A change that has not been sent yet is marked "Not sent yet"; when the retry succeeds, the same entry is marked sent instead of adding a second one. If the next check no longer finds the held change (the extension changed again, went back, or was removed), the held entry is marked "Not sent: it changed again before the retry", and a different change gets its own entry. The history stays in that browser profile and is not collected anywhere.
+Every change is also kept in `chrome.storage.local` (the newest 500 entries, at most about 1 MB; an entry still waiting to be sent is never dropped) and listed on the options page's History tab, with local time as `YYYY-MM-DD HH:mm`. A change that has not been sent yet is marked "Not sent yet"; when the retry succeeds, the same entry is marked sent instead of adding a second one. If the next check no longer finds the held change (the extension changed again, went back, or was removed), the held entry is marked "Not sent: it changed again before the retry", and a different change gets its own entry. The history stays in that browser profile and is not collected anywhere.
 
 Permissions: `management`, `storage`, `alarms`, and an optional host permission for the ntfy origin, requested when the URL is saved.
 
