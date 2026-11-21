@@ -27,7 +27,9 @@ find . -type f | LC_ALL=C sort | TZ=UTC zip -q -X -0 -@ "$out"
 
 # .gitattributes (export-ignore, export-subst) or a symlink would change or drop a committed file without an
 # error, so every zip entry must be a committed blob, byte for byte, and no committed file may be missing.
-want="$(git -C "$root" ls-tree -r HEAD extension | awk '{ sub("^extension/", "", $4); print $3, $4 }' | LC_ALL=C sort)"
-got="$(unzip -Z1 "$out" | while IFS= read -r f; do printf '%s %s\n' "$(git -C "$root" hash-object -- "$work/extension/$f")" "$f"; done | LC_ALL=C sort)"
+# shortcut: a path with a tab, newline or glob character is quoted or matched differently and fails the check;
+# rename such a file rather than supporting it.
+want="$(git -C "$root" -c core.quotepath=false ls-tree -r --format='%(objectname) %(path)' HEAD extension | sed 's| extension/| |' | LC_ALL=C sort)"
+got="$(unzip -Z1 "$out" | while IFS= read -r f; do printf '%s %s\n' "$(unzip -p "$out" "$f" | git -C "$root" hash-object --stdin)" "$f"; done | LC_ALL=C sort)"
 [ "$want" = "$got" ] || { echo "the zip does not hold exactly the committed files under extension/" >&2; diff <(echo "$want") <(echo "$got") >&2; exit 1; }
 shasum -a 256 "$out" | cut -d' ' -f1

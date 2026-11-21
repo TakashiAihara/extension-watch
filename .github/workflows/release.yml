@@ -22,7 +22,7 @@ jobs:
       - run: bun test
 
   # Holds the write and attestation permissions, so it installs nothing: it runs scripts/pack.sh from the
-  # tagged commit with the runner image's git, zip and gh.
+  # tagged commit and gh, using only tools already on the runner image.
   release:
     needs: test
     runs-on: ubuntu-latest
