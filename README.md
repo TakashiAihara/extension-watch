@@ -93,7 +93,7 @@ The PNG icons in `extension/icons/` are rendered from `icon.svg`. After editing 
 
 Bump `version` in `extension/manifest.json` through a pull request, then push a tag `v<version>` on main. The `release` workflow checks that the tag is on main and matches the manifest, runs the tests, and attaches `extension-watch.zip` to a GitHub Release with a build provenance attestation. `scripts/pack.sh` builds the zip from the committed files with fixed timestamps, so the same commit always gives the same bytes with Info-ZIP `zip`: rebuild it from the tag and compare the sha256 in the release notes, or run `gh attestation verify extension-watch.zip --repo TakashiAihara/extension-watch`.
 
-The Chrome Web Store text and screenshots are in `store/`; re-render the screenshots with `bun scripts/store-screenshots.ts store` when the options page changes.
+The Chrome Web Store text and screenshots are in `store/`; re-render the screenshots with `bun scripts/store-screenshots.ts store` (after `bunx playwright install chromium`) when the options page changes.
 
 ## Privacy
 

@@ -2,7 +2,7 @@
 
 The text entered in the developer dashboard, kept here so it changes together with the extension. The item name and summary come from `name` and `description` in `extension/manifest.json`.
 
-Screenshots (1280x800) are rendered with sample data by `bun scripts/store-screenshots.ts store`.
+Screenshots (1280x800) are rendered with sample data by `bun scripts/store-screenshots.ts store` (after `bun install` and `bunx playwright install chromium`).
 
 ## Description
 
@@ -51,7 +51,7 @@ Keeps the last snapshot of the extension list, the change history, and the ntfy 
 Runs a check every 5 minutes, because permissions granted at run time fire no management event.
 ```
 
-### Host permission (optional)
+### Host permission (optional_host_permissions: https://*/*, http://*/*)
 
 ```text
 Requested at run time for the one ntfy origin the user enters, so the extension can send the notification there. No other site is requested or accessed.
@@ -63,7 +63,7 @@ No remote code is used.
 
 ## Data usage
 
-No user data category applies: the list of installed extensions is sent only to the user's own ntfy server, and the developer receives nothing. All three certifications (no sale, no unrelated use, no creditworthiness use) apply.
+None of the dashboard's user data categories (personally identifiable information, health, financial and payment, authentication, personal communications, location, web history, user activity, website content) covers the list of installed extensions, which is the only data sent, and only to the ntfy server the user configures. The developer runs no server and receives nothing. All three certifications (no sale, no unrelated use, no creditworthiness use) apply.
 
 ## Privacy policy
 
