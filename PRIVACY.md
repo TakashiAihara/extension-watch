@@ -5,8 +5,8 @@ This extension watches the other extensions installed in your browser and sends 
 ## What it reads
 
 - The list of installed extensions from `chrome.management`: name, ID, version, install type, whether it is enabled and why it was disabled, its permissions and host permissions, and the permission warnings Chrome shows for it.
-- Its own settings: the ntfy URL and access token saved from the options page (`chrome.storage.local`) or set by policy (`chrome.storage.managed`).
-- The browser's UI language, so that switching languages, which changes the wording of the permission warnings, is not reported as a permission change.
+- Its own data in `chrome.storage.local` (listed under "What it stores"), and the ntfy URL and access token set by policy (`chrome.storage.managed`).
+- The browser's UI language (`chrome.i18n.getUILanguage`), so that switching languages, which changes the wording of the permission warnings, is not reported as a permission change.
 - It does not read web pages, browsing history, cookies, form data, or any other browsing data.
 
 ## Where data goes
