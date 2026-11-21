@@ -7,23 +7,46 @@ Screenshots (1280x800) are rendered with sample data by `bun scripts/store-scree
 ## Description
 
 ```text
-extension-watch tells you when another extension in your browser changes, so a silent update that adds permissions does not go unnoticed.
+Know when another extension changes, so a silent update that adds permissions does not go unnoticed.
 
-It sends a message to your ntfy topic when an extension:
+It sends a message to your own ntfy topic when an extension:
 - is installed (with its permissions, host permissions and permission warnings)
 - changes version
 - gains or loses permissions, host permissions or permission warnings
 - changes install type
 - is disabled (with Chrome's reason, such as permissions_increase) or enabled again
 
-It checks on browser start, on every extension event, and every 5 minutes, so changes made while it was not running are still reported. A failed send is retried on the next check. Every change is also kept in a local history on the options page.
+It checks on browser start, on every extension event, and every 5 minutes, so changes made while it was not running are still reported. A failed send is retried on the next check, and every change is kept in a local history on the options page.
 
 Setup: open the options page, enter your ntfy topic URL (for example https://ntfy.example.com/extension-watch) and an access token if your server needs one, then allow access to that origin. Administrators can push the URL and token by policy instead.
 
+Enforced by Chrome:
+- No site is reachable at install time. The only host permission is the ntfy origin you enter, requested when you save it
+- No content script: it never sees the pages you visit
+
+Checked by tests in the repository:
+- An access token is never sent over plain http, except to loopback
+- A URL set by policy brings its own token; the token typed on the options page is never sent to it
+- Each change is sent once, and a failed send is retried with the same change instead of being lost
+
 Nothing is sent anywhere except the ntfy URL you set. No analytics, no telemetry, no developer server.
 
-Source code: https://github.com/TakashiAihara/extension-watch
+No dependencies: about 440 lines of plain JavaScript you can read yourself. Releases are reproducible from their tag and carry a build provenance attestation.
+
+Open source (MIT): https://github.com/TakashiAihara/extension-watch
+Report a problem: https://github.com/TakashiAihara/extension-watch/issues
 ```
+
+## Links
+
+The dashboard's Store listing tab asks for these separately.
+
+- Homepage URL: `https://github.com/TakashiAihara/extension-watch`
+- Support URL: `https://github.com/TakashiAihara/extension-watch/issues`
+
+## Category
+
+Developer Tools (the same as Secure Cookie Viewer)
 
 ## Single purpose
 
