@@ -7,23 +7,48 @@ Screenshots (1280x800) are rendered with sample data by `bun scripts/store-scree
 ## Description
 
 ```text
-extension-watch tells you when another extension in your browser changes, so a silent update that adds permissions does not go unnoticed.
+Know when another extension changes, so a silent update that adds permissions does not go unnoticed.
 
-It sends a message to your ntfy topic when an extension:
+It sends a message to your own ntfy topic when an extension:
 - is installed (with its permissions, host permissions and permission warnings)
 - changes version
 - gains or loses permissions, host permissions or permission warnings
 - changes install type
 - is disabled (with Chrome's reason, such as permissions_increase) or enabled again
 
-It checks on browser start, on every extension event, and every 5 minutes, so changes made while it was not running are still reported. A failed send is retried on the next check. Every change is also kept in a local history on the options page.
+It checks on browser start, on every extension event, and every 5 minutes, so changes made while it was not running are still reported. A failed send is retried on the next check, and every change is kept in a local history on the options page.
 
 Setup: open the options page, enter your ntfy topic URL (for example https://ntfy.example.com/extension-watch) and an access token if your server needs one, then allow access to that origin. Administrators can push the URL and token by policy instead.
 
+Enforced by Chrome:
+- No host permission at install time. When you save an ntfy URL, the extension asks for that one origin and no other
+- No content script: it never sees the pages you visit
+
+Checked by tests in the repository:
+- A token is refused with a plain-http ntfy URL (loopback excepted), whether it comes from the options page or from policy
+- A URL set by policy brings its own token; the token typed on the options page is never sent to it
+- A failed send is retried with the same change on the next check, unless the extension has changed again by then
+
+Each request to ntfy (a long message is split into several) times out after 10 seconds and is retried like a failure, so a message ntfy accepted just before the timeout can arrive twice.
+
 Nothing is sent anywhere except the ntfy URL you set. No analytics, no telemetry, no developer server.
 
-Source code: https://github.com/TakashiAihara/extension-watch
+No dependencies and no build step: plain JavaScript you can read yourself. Each release can be rebuilt byte for byte from its tag with Info-ZIP zip, and carries a build provenance attestation.
+
+Open source (MIT): https://github.com/TakashiAihara/extension-watch
+Report a problem: https://github.com/TakashiAihara/extension-watch/issues
 ```
+
+## Links
+
+The dashboard's Store listing tab asks for these separately.
+
+- Homepage URL: `https://github.com/TakashiAihara/extension-watch`
+- Support URL: `https://github.com/TakashiAihara/extension-watch/issues`
+
+## Category
+
+Developer Tools (the same as Secure Cookie Viewer)
 
 ## Single purpose
 

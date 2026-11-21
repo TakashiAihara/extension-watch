@@ -9,14 +9,17 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-$root/extension-watch.zip}"
 case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
 
-if [ -n "$(git -C "$root" status --porcelain -- extension)" ]; then
-  echo "extension/ has uncommitted changes; commit them first so the zip matches a commit" >&2
+if [ -n "$(git -C "$root" status --porcelain -- extension LICENSE)" ]; then
+  echo "extension/ or LICENSE has uncommitted changes; commit them first so the zip matches a commit" >&2
   exit 1
 fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 git -C "$root" archive HEAD extension | tar -x -C "$work"
+# MIT asks for the notice in every copy, so the zip carries the repository's LICENSE at its root.
+[ ! -e "$work/extension/LICENSE" ] || { echo "extension/LICENSE would collide with the root LICENSE in the zip" >&2; exit 1; }
+git -C "$root" show HEAD:LICENSE > "$work/extension/LICENSE"
 
 cd "$work/extension"
 find . -type d -exec chmod 755 {} +
@@ -29,7 +32,7 @@ find . -type f | LC_ALL=C sort | TZ=UTC zip -q -X -0 -@ "$out"
 # error, so every zip entry must be a committed blob, byte for byte, and no committed file may be missing.
 # shortcut: git quotes a path with a tab, newline, quote or backslash, and unzip reads glob characters as a
 # pattern, so such a path can fail the check; rename the file rather than support it.
-want="$(git -C "$root" -c core.quotepath=false ls-tree -r --format='%(objectname) %(path)' HEAD extension | sed 's| extension/| |' | LC_ALL=C sort)"
+want="$( { git -C "$root" -c core.quotepath=false ls-tree -r --format='%(objectname) %(path)' HEAD extension | sed 's| extension/| |'; echo "$(git -C "$root" rev-parse HEAD:LICENSE) LICENSE"; } | LC_ALL=C sort)"
 got="$(unzip -Z1 "$out" | while IFS= read -r f; do printf '%s %s\n' "$(unzip -p "$out" "$f" | git -C "$root" hash-object --stdin)" "$f"; done | LC_ALL=C sort)"
 [ "$want" = "$got" ] || { echo "the zip does not hold exactly the committed files under extension/" >&2; diff <(echo "$want") <(echo "$got") >&2; exit 1; }
 shasum -a 256 "$out" | cut -d' ' -f1
