@@ -89,6 +89,14 @@ The PNG icons in `extension/icons/` are rendered from `icon.svg`. After editing 
 
 `tests/rules.test.ts` covers the URL and token checks the options page and the sender share.
 
+## Release
+
+Bump `version` in `extension/manifest.json` through a pull request, then push a tag `v<version>` on main. The `release` workflow checks that the tag is on main and matches the manifest, runs the tests, and attaches `extension-watch.zip` to a GitHub Release with a build provenance attestation. `scripts/pack.sh` builds the zip from the committed files with fixed timestamps, so the same commit always gives the same bytes with Info-ZIP `zip`: rebuild it from the tag and compare the sha256 in the release notes, or run `gh attestation verify extension-watch.zip --repo TakashiAihara/extension-watch`.
+
+## Privacy
+
+See [PRIVACY.md](PRIVACY.md). The extension sends only to the ntfy URL you configure.
+
 ## Not verified
 
 - The event order and the reported permissions for a store auto-update, and for an update Chrome disables with `permissions_increase` (the added permissions may only appear once the update is accepted)
