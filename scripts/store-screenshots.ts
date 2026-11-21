@@ -1,0 +1,74 @@
+// Renders the Chrome Web Store screenshots (1280x800) of the options page with sample data:
+//   bun scripts/store-screenshots.ts <output dir>
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { chromium } from "playwright";
+import { diff, snapshot } from "../extension/diff.js";
+
+const out = resolve(process.argv[2] ?? "store");
+mkdirSync(out, { recursive: true });
+
+const min = 60_000;
+const now = Date.now();
+// The lines come from diff() itself, so the screenshots keep the wording real messages use.
+const info = (id: string, name: string, version: string, more: object = {}) =>
+  ({ id, name, version, type: "extension", installType: "normal", enabled: true, permissions: [], hostPermissions: [], ...more });
+const sample = (at: number, state: string, before: any, after: any, warnings: [string[], string[]] = [[], []]) => {
+  const prev = before ? snapshot([before], "", { [before.id]: warnings[0] }) : {};
+  const [change] = diff(prev, snapshot([after], "", { [after.id]: warnings[1] }));
+  return { at, id: change.id, name: change.name, lines: change.lines, state };
+};
+const tab = "kembcdlbgbcnnchcnbdhbmbhbejnedjf";
+const reader = "dgldcbgpnkooljhfhcjpkojcdnfkepnb";
+const picker = "ckklpoccipcbjojmlaolfdpbgjehmmpc";
+const price = "fomieninlmhecfehhapfijaenlkebomm";
+const history = [
+  sample(now - 3 * min, "sent", info(tab, "Tab Organizer", "2.4.1"), info(tab, "Tab Organizer", "2.5.0", { permissions: ["history"] }),
+    [[], ["Read and change your browsing history on all your signed-in devices"]]),
+  sample(now - 42 * min, "pending", info(reader, "Reader Mode", "1.8.0"), info(reader, "Reader Mode", "1.9.0", { hostPermissions: ["<all_urls>"] }),
+    [[], ["Read and change all your data on all websites"]]),
+  sample(now - 300 * min, "sent", info(picker, "Color Picker", "5.1.0"), info(picker, "Color Picker", "5.1.0", { enabled: false, disabledReason: "permissions_increase" })),
+  sample(now - 1560 * min, "sent", null, info(price, "Price Tracker", "3.0.2", { permissions: ["storage", "alarms"], hostPermissions: ["https://*.example.com/*"] })),
+];
+
+const tmp = mkdtempSync(join(tmpdir(), "extension-watch-shots-"));
+const ext = resolve(import.meta.dir, "../extension");
+let context;
+try {
+  context = await chromium.launchPersistentContext(join(tmp, "profile"), {
+    channel: "chromium",
+    headless: true,
+    viewport: { width: 1280, height: 800 },
+    args: ["--lang=en-US", `--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
+  });
+  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+  const id = new URL(worker.url()).host;
+  // Let the first check write its baseline before the sample data replaces the history.
+  for (let i = 0; !(await worker.evaluate(async () => !!(await chrome.storage.local.get("extensions")).extensions)); i++) {
+    if (i > 100) throw new Error("the extension never wrote its first snapshot");
+    await Bun.sleep(100);
+  }
+  // Saving the URL schedules a check 2 s later (SETTLE_MS in background.js); finding no change, it would mark
+  // the sample "pending" entry "replaced". Write the history only after that check, since a history change
+  // schedules nothing.
+  await worker.evaluate(() => chrome.storage.local.set({ ntfyUrl: "https://ntfy.example.com/extension-watch", lastError: null }));
+  await Bun.sleep(3000);
+  await worker.evaluate((h) => chrome.storage.local.set({ history: h }), history);
+
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${id}/options.html`);
+  await page.waitForSelector('#state[data-state="watching"]');
+  await page.screenshot({ path: join(out, "screenshot-settings.png") });
+
+  // A pending entry exists only because a send failed, and the failed check records the error, so the
+  // history with "Not sent yet" is shown under the Error state, as it would be for real.
+  await worker.evaluate((at) => chrome.storage.local.set({ lastError: `${new Date(at).toISOString()} ntfy 503` }), now - 42 * min);
+  await page.waitForSelector('#state[data-state="error"]');
+  await page.click("#tab-history");
+  await page.waitForSelector("#panel-history:not([hidden])");
+  await page.screenshot({ path: join(out, "screenshot-history.png") });
+} finally {
+  await context?.close();
+  rmSync(tmp, { recursive: true, force: true });
+}
