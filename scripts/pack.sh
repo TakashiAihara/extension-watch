@@ -25,8 +25,9 @@ find . -exec env TZ=UTC touch -h -t 198001010000 {} +
 rm -f "$out"
 find . -type f | LC_ALL=C sort | TZ=UTC zip -q -X -0 -@ "$out"
 
-# .gitattributes (export-ignore) or a symlink would drop a committed file from the zip without an error.
-want="$(git -C "$root" ls-tree -r --name-only HEAD extension | sed 's|^extension/||' | LC_ALL=C sort)"
-got="$(unzip -Z1 "$out" | LC_ALL=C sort)"
+# .gitattributes (export-ignore, export-subst) or a symlink would change or drop a committed file without an
+# error, so every zip entry must be a committed blob, byte for byte, and no committed file may be missing.
+want="$(git -C "$root" ls-tree -r HEAD extension | awk '{ sub("^extension/", "", $4); print $3, $4 }' | LC_ALL=C sort)"
+got="$(unzip -Z1 "$out" | while IFS= read -r f; do printf '%s %s\n' "$(git -C "$root" hash-object -- "$work/extension/$f")" "$f"; done | LC_ALL=C sort)"
 [ "$want" = "$got" ] || { echo "the zip does not hold exactly the committed files under extension/" >&2; diff <(echo "$want") <(echo "$got") >&2; exit 1; }
 shasum -a 256 "$out" | cut -d' ' -f1

@@ -22,3 +22,4 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
       - run: bun test
+      - run: scripts/pack.sh "$RUNNER_TEMP/extension-watch.zip"

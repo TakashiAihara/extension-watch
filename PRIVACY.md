@@ -5,7 +5,8 @@ This extension watches the other extensions installed in your browser and sends 
 ## What it reads
 
 - The list of installed extensions from `chrome.management`: name, ID, version, install type, whether it is enabled and why it was disabled, its permissions and host permissions, and the permission warnings Chrome shows for it.
-- It does not read web pages, browsing history, cookies, form data, or anything else outside that list.
+- Its own settings: the ntfy URL and access token from the options page or from policy (`chrome.storage.managed`), and the browser's UI language (the permission warnings are read in that language).
+- It does not read web pages, browsing history, cookies, form data, or any other browsing data.
 
 ## Where data goes
 

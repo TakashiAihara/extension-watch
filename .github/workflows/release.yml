@@ -21,7 +21,8 @@ jobs:
       - run: bunx playwright install --with-deps chromium
       - run: bun test
 
-  # Holds the write and attestation permissions, so it runs only git, zip and gh from the runner image.
+  # Holds the write and attestation permissions, so it installs nothing: it runs scripts/pack.sh from the
+  # tagged commit with the runner image's git, zip and gh.
   release:
     needs: test
     runs-on: ubuntu-latest
@@ -52,6 +53,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA256: ${{ steps.pack.outputs.sha256 }}
         run: |
-          gh release create "$GITHUB_REF_NAME" extension-watch.zip --title "$GITHUB_REF_NAME" --notes "sha256: \`$SHA256\`
+          gh release create "$GITHUB_REF_NAME" extension-watch.zip --verify-tag --title "$GITHUB_REF_NAME" --notes "sha256: \`$SHA256\`
 
           Rebuild it from this tag with \`scripts/pack.sh\` (Info-ZIP \`zip\`) and compare, or verify the attestation with \`gh attestation verify extension-watch.zip --repo $GITHUB_REPOSITORY\`."
