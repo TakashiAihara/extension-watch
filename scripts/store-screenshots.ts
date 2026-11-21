@@ -14,11 +14,11 @@ const history = [
   { at: now - 3 * min, id: "kembcdlbgbcnnchcnbdhbmbhbejnedjf", name: "Tab Organizer", state: "sent",
     lines: ["version 2.4.1 -> 2.5.0", "permissions added: history", "warnings added: Read and change your browsing history on all your signed-in devices"] },
   { at: now - 42 * min, id: "dgldcbgpnkooljhfhcjpkojcdnfkepnb", name: "Reader Mode", state: "pending",
-    lines: ["version 1.8.0 -> 1.9.0", "host permissions added: <all_urls>", "warnings added: Read and change all your data on all websites"] },
+    lines: ["version 1.8.0 -> 1.9.0", "hosts added: <all_urls>", "warnings added: Read and change all your data on all websites"] },
   { at: now - 5 * 60 * min, id: "ckklpoccipcbjojmlaolfdpbgjehmmpc", name: "Color Picker", state: "sent",
     lines: ["disabled (permissions_increase)"] },
   { at: now - 26 * 60 * min, id: "fomieninlmhecfehhapfijaenlkebomm", name: "Price Tracker", state: "sent",
-    lines: ["installed 3.0.2 (normal)", "permissions: storage, alarms", "host permissions: https://*.example.com/*"] },
+    lines: ["installed 3.0.2 (normal)", "permissions: storage, alarms", "hosts: https://*.example.com/*"] },
 ];
 
 const tmp = mkdtempSync(join(tmpdir(), "extension-watch-shots-"));
@@ -50,6 +50,10 @@ try {
   await page.waitForSelector('#state[data-state="watching"]');
   await page.screenshot({ path: join(out, "screenshot-settings.png") });
 
+  // A pending entry exists only because a send failed, and the failed check records the error, so the
+  // history with "Not sent yet" is shown under the Error state, as it would be for real.
+  await worker.evaluate((at) => chrome.storage.local.set({ lastError: `${new Date(at).toISOString()} ntfy 503` }), now - 42 * min);
+  await page.waitForSelector('#state[data-state="error"]');
   await page.click("#tab-history");
   await page.waitForSelector("#panel-history:not([hidden])");
   await page.screenshot({ path: join(out, "screenshot-history.png") });

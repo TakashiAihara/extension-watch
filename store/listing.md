@@ -63,7 +63,7 @@ No remote code is used.
 
 ## Data usage
 
-None of the dashboard's user data categories (personally identifiable information, health, financial and payment, authentication, personal communications, location, web history, user activity, website content) covers the list of installed extensions, which is the only data sent, and only to the ntfy server the user configures. The developer runs no server and receives nothing. All three certifications (no sale, no unrelated use, no creditworthiness use) apply.
+Declare "Authentication information": the ntfy access token the user enters is stored in `chrome.storage.local` and sent with every notification, as an `Authorization` header (or `?auth=` when set by policy), to the ntfy server the user configures. The list of installed extensions, the only other data sent and only to that server, fits none of the dashboard's categories. The developer runs no server and receives nothing. All three certifications (no sale, no unrelated use, no creditworthiness use) apply.
 
 ## Privacy policy
 
