@@ -14,5 +14,5 @@ This extension watches the other extensions installed in your browser and sends 
 
 ## What it stores
 
-- In `chrome.storage.local`, in your browser profile only: the last snapshot of the extension list (and the browser language its permission warnings were read in), the history of changes (the newest 500 entries, about 1 MB), the last send error, and the ntfy URL and access token entered on the options page.
+- In `chrome.storage.local`, in your browser profile only: the last snapshot of the extension list (and the browser language its permission warnings were read in), the history of changes (the newest 500 entries, about 1 MB; a change still waiting to be sent is kept past that limit until it is sent or superseded), the last send error, and the ntfy URL and access token entered on the options page.
 - Removing the extension deletes this data.
