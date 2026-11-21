@@ -21,17 +21,17 @@ It checks on browser start, on every extension event, and every 5 minutes, so ch
 Setup: open the options page, enter your ntfy topic URL (for example https://ntfy.example.com/extension-watch) and an access token if your server needs one, then allow access to that origin. Administrators can push the URL and token by policy instead.
 
 Enforced by Chrome:
-- No site is reachable at install time. The only host permission is the ntfy origin you enter, requested when you save it
+- No site is reachable at install time, and afterwards only the origins you grant. The extension asks only for the ntfy origin you enter, when you save it
 - No content script: it never sees the pages you visit
 
 Checked by tests in the repository:
 - An access token is never sent over plain http, except to loopback
 - A URL set by policy brings its own token; the token typed on the options page is never sent to it
-- Each change is sent once, and a failed send is retried with the same change instead of being lost
+- A change is not sent again once ntfy accepts it, and a failed send is retried with the same change instead of being lost
 
 Nothing is sent anywhere except the ntfy URL you set. No analytics, no telemetry, no developer server.
 
-No dependencies: about 440 lines of plain JavaScript you can read yourself. Releases are reproducible from their tag and carry a build provenance attestation.
+No dependencies and no build step: plain JavaScript you can read yourself. Each release can be rebuilt byte for byte from its tag with Info-ZIP zip, and carries a build provenance attestation.
 
 Open source (MIT): https://github.com/TakashiAihara/extension-watch
 Report a problem: https://github.com/TakashiAihara/extension-watch/issues

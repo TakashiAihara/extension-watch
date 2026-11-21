@@ -104,7 +104,6 @@ See [PRIVACY.md](PRIVACY.md). The extension sends only to the ntfy URL you confi
 - The event order and the reported permissions for a store auto-update, and for an update Chrome disables with `permissions_increase` (the added permissions may only appear once the update is accepted)
 - Settings pushed by a real policy: the tests replace `chrome.storage.managed.get` inside the extension instead of installing a policy
 
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
