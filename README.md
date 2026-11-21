@@ -25,7 +25,7 @@ Permissions: `management`, `storage`, `alarms`, and an optional host permission 
 
 ## Install
 
-1. Open `chrome://extensions`, turn on Developer mode, and click "Load unpacked". Select the `extension/` directory.
+1. Install it from the [Chrome Web Store](https://chromewebstore.google.com/detail/mglinkabmngcojkiakldicpceakmfgid). To run the code in this repository instead, open `chrome://extensions`, turn on Developer mode, click "Load unpacked" and select the `extension/` directory.
 2. Open the extension's options, enter the ntfy topic URL (for example `https://ntfy.example.com/extension-watch`) and, if the server requires authentication, an access token (sent as `Authorization: Bearer`). Credentials, in the token field or as `?auth=` / `?authorization=` in the URL, need an https URL; only loopback may use http. Save and allow access to that origin.
 
 ## Deploy to an organization
@@ -34,7 +34,7 @@ An administrator can install the extension on every managed browser and push the
 
 ### Install
 
-Force-install it with the `ExtensionInstallForcelist` policy. Chrome keeps a force-installed extension from being disabled or removed by the user (on a best-effort basis, per the policy description).
+Force-install it with the `ExtensionInstallForcelist` policy. Chrome keeps a force-installed extension from being disabled or removed by the user (on a best-effort basis, per the policy description). The Chrome Web Store build is the entry `mglinkabmngcojkiakldicpceakmfgid;https://clients2.google.com/service/update2/crx`, and `mglinkabmngcojkiakldicpceakmfgid` is the `<extension id>` used below.
 
 Where the extension can come from depends on how the browsers are managed (the policy description in Chromium's `ExtensionInstallForcelist.yaml`):
 
