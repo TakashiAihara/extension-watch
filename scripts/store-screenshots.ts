@@ -4,21 +4,32 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
+import { diff, snapshot } from "../extension/diff.js";
 
 const out = resolve(process.argv[2] ?? "store");
 mkdirSync(out, { recursive: true });
 
 const min = 60_000;
 const now = Date.now();
+// The lines come from diff() itself, so the screenshots keep the wording real messages use.
+const info = (id: string, name: string, version: string, more: object = {}) =>
+  ({ id, name, version, type: "extension", installType: "normal", enabled: true, permissions: [], hostPermissions: [], ...more });
+const sample = (at: number, state: string, before: any, after: any, warnings: [string[], string[]] = [[], []]) => {
+  const prev = before ? snapshot([before], "", { [before.id]: warnings[0] }) : {};
+  const [change] = diff(prev, snapshot([after], "", { [after.id]: warnings[1] }));
+  return { at, id: change.id, name: change.name, lines: change.lines, state };
+};
+const tab = "kembcdlbgbcnnchcnbdhbmbhbejnedjf";
+const reader = "dgldcbgpnkooljhfhcjpkojcdnfkepnb";
+const picker = "ckklpoccipcbjojmlaolfdpbgjehmmpc";
+const price = "fomieninlmhecfehhapfijaenlkebomm";
 const history = [
-  { at: now - 3 * min, id: "kembcdlbgbcnnchcnbdhbmbhbejnedjf", name: "Tab Organizer", state: "sent",
-    lines: ["version 2.4.1 -> 2.5.0", "permissions added: history", "warnings added: Read and change your browsing history on all your signed-in devices"] },
-  { at: now - 42 * min, id: "dgldcbgpnkooljhfhcjpkojcdnfkepnb", name: "Reader Mode", state: "pending",
-    lines: ["version 1.8.0 -> 1.9.0", "hosts added: <all_urls>", "warnings added: Read and change all your data on all websites"] },
-  { at: now - 5 * 60 * min, id: "ckklpoccipcbjojmlaolfdpbgjehmmpc", name: "Color Picker", state: "sent",
-    lines: ["disabled (permissions_increase)"] },
-  { at: now - 26 * 60 * min, id: "fomieninlmhecfehhapfijaenlkebomm", name: "Price Tracker", state: "sent",
-    lines: ["installed 3.0.2 (normal)", "permissions: storage, alarms", "hosts: https://*.example.com/*"] },
+  sample(now - 3 * min, "sent", info(tab, "Tab Organizer", "2.4.1"), info(tab, "Tab Organizer", "2.5.0", { permissions: ["history"] }),
+    [[], ["Read and change your browsing history on all your signed-in devices"]]),
+  sample(now - 42 * min, "pending", info(reader, "Reader Mode", "1.8.0"), info(reader, "Reader Mode", "1.9.0", { hostPermissions: ["<all_urls>"] }),
+    [[], ["Read and change all your data on all websites"]]),
+  sample(now - 300 * min, "sent", info(picker, "Color Picker", "5.1.0"), info(picker, "Color Picker", "5.1.0", { enabled: false, disabledReason: "permissions_increase" })),
+  sample(now - 1560 * min, "sent", null, info(price, "Price Tracker", "3.0.2", { permissions: ["storage", "alarms"], hostPermissions: ["https://*.example.com/*"] })),
 ];
 
 const tmp = mkdtempSync(join(tmpdir(), "extension-watch-shots-"));
