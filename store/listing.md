@@ -29,7 +29,7 @@ Checked by tests in the repository:
 - A URL set by policy brings its own token; the token typed on the options page is never sent to it
 - A failed send is retried with the same change on the next check, unless the extension has changed again by then
 
-A send times out after 10 seconds and is retried like a failure, so a message ntfy accepted just before the timeout can arrive twice.
+Each request to ntfy (a long message is split into several) times out after 10 seconds and is retried like a failure, so a message ntfy accepted just before the timeout can arrive twice.
 
 Nothing is sent anywhere except the ntfy URL you set. No analytics, no telemetry, no developer server.
 
