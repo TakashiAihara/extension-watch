@@ -18,6 +18,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 git -C "$root" archive HEAD extension | tar -x -C "$work"
 # MIT asks for the notice in every copy, so the zip carries the repository's LICENSE at its root.
+[ ! -e "$work/extension/LICENSE" ] || { echo "extension/LICENSE would collide with the root LICENSE in the zip" >&2; exit 1; }
 git -C "$root" show HEAD:LICENSE > "$work/extension/LICENSE"
 
 cd "$work/extension"
